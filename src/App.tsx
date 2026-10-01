@@ -1,14 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { ErrorBoundary } from './layout/ErrorBoundary'
 import { AppLayout } from './layout/AppLayout'
-import { Dashboard } from './routes/Dashboard'
-import { Editor } from './routes/Editor'
-import { Components } from './routes/Components'
+import { Dashboard, PagesScreen, AiHistoryScreen, FilesScreen } from './routes/Dashboard'
 import { Deploy } from './routes/Deploy'
 import { Settings } from './routes/Settings'
 import { NotFound } from './routes/NotFound'
 import { Login } from './routes/Login'
-import { PublicHome } from './routes/PublicHome'
+import { PublicHome, PageView, PublicSubPage } from './routes/PublicHome'
 import { getToken } from './lib/builderApi'
 
 // 관리자 화면은 토큰이 있을 때만 연다. 없으면 로그인으로 보낸다.
@@ -28,11 +26,14 @@ function AppRoutes() {
     <Routes>
       <Route index element={<PublicHome />} />
       <Route path="login" element={<LoginRoute />} />
+      <Route path="page/:id" element={<PageView />} />
+      <Route path=":slug" element={<PublicSubPage />} />
       <Route element={<RequireAuth />}>
         <Route path="admin" element={<Dashboard />} />
+        <Route path="admin/pages" element={<PagesScreen />} />
+        <Route path="admin/ai" element={<AiHistoryScreen />} />
+        <Route path="admin/files" element={<FilesScreen />} />
         <Route path="new" element={<Navigate to="/admin" replace />} />
-        <Route path="editor" element={<Editor />} />
-        <Route path="components" element={<Components />} />
         <Route path="deploy" element={<Deploy />} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<NotFound />} />

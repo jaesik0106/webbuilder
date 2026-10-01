@@ -24,7 +24,7 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
   }
 
   return (
-    <div className="min-h-screen bg-bg-0 flex items-center justify-center px-4">
+    <div className="admin-light min-h-screen bg-bg-0 flex items-center justify-center px-4">
       <form onSubmit={submit} className="w-full max-w-[400px] bg-bg-1 border border-border-default rounded-2xl p-8">
         <h1 className="font-display text-[28px] font-bold text-text-0 mb-2">웹빌더</h1>
         <p className="text-text-2 text-[13px] mb-6">관리자 계정으로 로그인하고 홈페이지를 수정합니다.</p>

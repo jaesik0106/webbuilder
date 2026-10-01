@@ -10,6 +10,8 @@ export interface Project {
   blockCount: number
   config?: SiteConfig
   serverId?: number
+  slug?: string
+  isHome?: boolean
   settings?: ProjectSettings
   deployUrl?: string
   deploymentId?: string

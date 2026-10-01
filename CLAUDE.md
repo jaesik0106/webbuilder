@@ -17,11 +17,11 @@ A visual website builder where **JSON config is the source of truth**. Both huma
 
 ```
 src/
-  routes/        Dashboard, Editor, Components, Deploy, Settings, NotFound
-  layout/        AppLayout, TopNav, ErrorBoundary
-  editor/        EditorLayout, Canvas, CanvasToolbar, LayersPanel, AgentPanel,
-                 JsonDrawer, RightSidebar, PropertiesPanel, VersionHistory
-  blocks/        registry.tsx, types.ts, BlockWrapper.tsx
+  routes/        PublicHome (/ and /page/:id), Login, Dashboard (+ PagesScreen, AiHistoryScreen), Settings, Deploy, NotFound
+  layout/        AppLayout, AdminSidebar (+ AdminTopBar), ErrorBoundary
+  editor/        OnPageEditor (on-page editing toolbar, inline text edit, add/move/delete sections),
+                 RightSidebar, PropertiesPanel, DesignPanel, ReviseBar (AI edits), inlineText, useAutoSaveToProject
+  blocks/        registry.tsx, types.ts
     hero/        HeroCentered, HeroSplit, HeroGradient
     features/    FeaturesGrid, FeaturesList
     pricing/     PricingSimple, PricingComparison
@@ -43,7 +43,7 @@ src/
 
 - **configStore**: Zustand + immer. Holds site JSON config and full undo/redo stack.
 - **Block Registry**: Maps block type string to React component. `renderBlock(config)` resolves and renders.
-- **BlockWrapper**: Shared selection/hover/type-tag UI around each block in editor mode.
+- **On-page editing**: the separate /editor screen was removed (2026-10-01). Admins edit on the real page (/ or /page/:id) with the OnPageEditor toolbar.
 - **Sidebar editing**: Right sidebar has dynamic property inputs per block type. Changes update store, canvas re-renders.
 
 ## Commands
@@ -63,8 +63,8 @@ All from wireframes.html:
 
 ## Conventions
 
-- Dark theme only (no light mode)
-- Green (#22c55e) is the sole accent color
+- Editor screens: dark theme, green (#22c55e) accent
+- Admin screens (dashboard, pages, settings, login): match the existing 10PAGE admin, white background, blue (#1c54e4) accent, Pretendard font, applied via the .admin-light token override in src/index.css
 - All blocks are Tailwind-only, no external CSS
 - Block components receive `{ block: BlockConfig }` as props
 - Use `@/` import alias for all src/ imports

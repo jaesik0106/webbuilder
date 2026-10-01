@@ -6,11 +6,13 @@ import {
   Briefcase, UtensilsCrossed, Building2, BookOpen, ExternalLink,
 } from 'lucide-react'
 import { useProjectsStore, type Project } from '@/store/projectsStore'
-import { useConfigStore, defaultConfig } from '@/store/configStore'
-import { useEditorStore } from '@/store/editorStore'
+import { defaultConfig } from '@/store/configStore'
 import { templateMeta, buildTemplate } from '@/lib/templates'
+import { generateSiteConfig } from '@/lib/generate-site'
+import { FileManagerPanel } from '@/editor/FileManager'
 import {
-  deleteServerPage, ensureServerPage, fetchAiUsage, fetchPublicHome, renameServerPage, type AiUsageEntry,
+  deleteServerPage, ensureServerPage, fetchAiUsage, fetchPublicHome, renameServerPage, updatePageMeta,
+  type AiUsageEntry, type SavedPage,
 } from '@/lib/builderApi'
 
 const templateKo: Record<string, { name: string; description: string; icon: typeof Briefcase }> = {
@@ -65,6 +67,94 @@ function QuickAction({
   )
 }
 
+// 서버에서 돌려준 페이지로 목록을 갱신한다. 메인을 바꿨다면 다른 페이지는 서브가 된다.
+function applyPageMeta(page: SavedPage) {
+  useProjectsStore.setState((state) => ({
+    projects: state.projects.map((item) => {
+      if (item.serverId === page.id) return { ...item, slug: page.slug ?? undefined, isHome: page.isHome }
+      return page.isHome ? { ...item, isHome: false } : item
+    }),
+  }))
+}
+
+/** 구분(메인/서브)과 주소 칸. 서브 페이지는 주소를 바꾸거나 메인으로 지정할 수 있다. */
+function PageKindCells({ project, isHome }: { project: Project; isHome: boolean }) {
+  const [editing, setEditing] = useState(false)
+  const [slug, setSlug] = useState(project.slug ?? '')
+
+  async function saveSlug() {
+    setEditing(false)
+    const next = slug.trim().toLowerCase()
+    if (!project.serverId || !next || next === project.slug) {
+      setSlug(project.slug ?? '')
+      return
+    }
+    try {
+      const result = await updatePageMeta(project.serverId, { slug: next })
+      applyPageMeta(result.page)
+      toast.success('주소를 바꿨습니다.')
+    } catch (error) {
+      setSlug(project.slug ?? '')
+      toast.error(error instanceof Error ? error.message : '주소를 바꾸지 못했습니다.')
+    }
+  }
+
+  async function makeHome() {
+    if (!project.serverId) return
+    try {
+      const result = await updatePageMeta(project.serverId, { isHome: true })
+      applyPageMeta(result.page)
+      toast.success(`'${project.name}'을(를) 메인 페이지로 지정했습니다.`)
+    } catch {
+      toast.error('메인 페이지로 지정하지 못했습니다.')
+    }
+  }
+
+  return (
+    <>
+      <td className="px-4 py-3">
+        {isHome ? (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green text-white text-[11.5px] font-semibold">메인</span>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-bg-3 text-text-1 text-[11.5px] font-medium">서브</span>
+            <button type="button" onClick={makeHome} className="text-[11.5px] text-green hover:underline">메인으로</button>
+          </div>
+        )}
+      </td>
+      <td className="px-4 py-3 text-[12.5px]">
+        {isHome ? (
+          <a href="/" target="_blank" rel="noreferrer" className="text-text-1 hover:text-green">/</a>
+        ) : editing ? (
+          <div className="flex items-center gap-0.5">
+            <span className="text-text-3">/</span>
+            <input
+              autoFocus
+              value={slug}
+              onChange={(event) => setSlug(event.target.value.replace(/[^a-zA-Z0-9-]/g, ''))}
+              onBlur={saveSlug}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') saveSlug()
+                if (event.key === 'Escape') {
+                  setSlug(project.slug ?? '')
+                  setEditing(false)
+                }
+              }}
+              placeholder="about"
+              className="w-28 px-1.5 py-0.5 rounded border border-border-default bg-bg-1 text-text-0"
+            />
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <a href={`/${project.slug ?? ''}`} target="_blank" rel="noreferrer" className="text-text-1 hover:text-green">/{project.slug}</a>
+            <button type="button" onClick={() => setEditing(true)} className="text-[11px] text-text-3 hover:text-green">변경</button>
+          </div>
+        )}
+      </td>
+    </>
+  )
+}
+
 function PageRow({ project, isHome, onOpen }: { project: Project; isHome: boolean; onOpen: (project: Project) => void }) {
   const renameProject = useProjectsStore((s) => s.renameProject)
   const deleteProject = useProjectsStore((s) => s.deleteProject)
@@ -111,7 +201,7 @@ function PageRow({ project, isHome, onOpen }: { project: Project; isHome: boolea
     const copyName = `${project.name} 사본`
     // 복제본은 원본 서버 페이지와 연결을 끊고 새 페이지로 저장한다.
     useProjectsStore.setState((state) => ({
-      projects: state.projects.map((item) => (item.id === id ? { ...item, name: copyName, serverId: undefined } : item)),
+      projects: state.projects.map((item) => (item.id === id ? { ...item, name: copyName, serverId: undefined, slug: undefined, isHome: false } : item)),
     }))
     try {
       await ensureServerPage(id, copyName, copy.config || defaultConfig)
@@ -150,16 +240,7 @@ function PageRow({ project, isHome, onOpen }: { project: Project; isHome: boolea
           </button>
         )}
       </td>
-      <td className="px-4 py-3">
-        {isHome ? (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green/15 text-green text-[11.5px] font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-green" />
-            홈페이지에 공개 중
-          </span>
-        ) : (
-          <span className="text-text-3 text-[12px]">보관</span>
-        )}
-      </td>
+      <PageKindCells project={project} isHome={isHome} />
       <td className="px-4 py-3 text-text-2 text-[12.5px] hidden md:table-cell">{project.blockCount}개</td>
       <td className="px-4 py-3 text-text-2 text-[12.5px] hidden md:table-cell">{formatDate(project.updatedAt)}</td>
       <td className="px-4 py-3">
@@ -201,23 +282,34 @@ function PageRow({ project, isHome, onOpen }: { project: Project; isHome: boolea
 function NewPagePanel({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
   const addProject = useProjectsStore((s) => s.addProject)
-  const setConfig = useConfigStore((s) => s.setConfig)
-  const setActiveProject = useEditorStore((s) => s.setActiveProject)
-  const setGenerating = useEditorStore((s) => s.setGenerating)
   const [prompt, setPrompt] = useState('')
+  const [generating, setGenerating] = useState(false)
 
-  async function create(name: string, config = defaultConfig, generatePrompt?: string) {
+  // 페이지를 서버에 만든 뒤, 그 페이지 화면에서 바로 수정 도구로 연다.
+  async function create(name: string, config = defaultConfig) {
     const id = addProject(name)
-    setActiveProject(id)
-    setConfig(config)
     try {
-      await ensureServerPage(id, name, config)
+      const serverId = await ensureServerPage(id, name, config)
+      useProjectsStore.getState().updateProjectConfig(id, config)
+      navigate(`/page/${serverId}`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '페이지를 만들지 못했습니다.')
-      return
     }
-    if (generatePrompt) setGenerating(generatePrompt)
-    navigate('/editor')
+  }
+
+  async function createWithAi() {
+    const text = prompt.trim()
+    if (!text || generating) return
+    setGenerating(true)
+    try {
+      const { config, source } = await generateSiteConfig(text)
+      if (source === 'template') toast('AI 키가 없어 비슷한 기본 틀로 만들었습니다.')
+      await create(config.name || text.slice(0, 30), config)
+    } catch {
+      toast.error('AI로 페이지를 만들지 못했습니다.')
+    } finally {
+      setGenerating(false)
+    }
   }
 
   return (
@@ -233,19 +325,19 @@ function NewPagePanel({ onClose }: { onClose: () => void }) {
           value={prompt}
           onChange={(event) => setPrompt(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && prompt.trim()) create(prompt.trim().slice(0, 30), defaultConfig, prompt.trim())
+            if (event.key === 'Enter') createWithAi()
           }}
           placeholder="예: 강남에 있는 치과 홈페이지, 진료 안내와 예약 문의 포함"
           className="flex-1 h-9 px-3 rounded-lg bg-bg-2 border border-border-default text-text-0 text-[13px] placeholder:text-text-3"
         />
         <button
           type="button"
-          disabled={!prompt.trim()}
-          onClick={() => create(prompt.trim().slice(0, 30), defaultConfig, prompt.trim())}
+          disabled={!prompt.trim() || generating}
+          onClick={createWithAi}
           className="h-9 px-4 rounded-lg bg-green text-black text-[13px] font-semibold inline-flex items-center gap-1.5 disabled:opacity-40"
         >
           <Sparkles size={14} />
-          만들기
+          {generating ? '만드는 중...' : '만들기'}
         </button>
       </div>
 
@@ -281,11 +373,70 @@ function NewPagePanel({ onClose }: { onClose: () => void }) {
   )
 }
 
+function PageListCard({ homeId, onOpen }: { homeId: number | null; onOpen: (project: Project) => void }) {
+  const projects = useProjectsStore((s) => s.projects)
+  const serverProjects = projects.filter((project) => project.serverId)
+  return (
+    <div className="bg-bg-1 border border-border-default rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3">
+        <h2 className="text-text-0 text-[15px] font-semibold">페이지 목록</h2>
+        <span className="text-text-3 text-[12px]">메인 페이지는 홈페이지 첫 화면(/)에, 서브 페이지는 각자의 주소에 공개됩니다</span>
+      </div>
+      {serverProjects.length === 0 ? (
+        <div className="px-4 py-10 text-center text-text-2 text-[13px] border-t border-border-default">
+          아직 페이지가 없습니다. 새 페이지 만들기로 시작하세요.
+        </div>
+      ) : (
+        <table className="w-full">
+          <thead>
+            <tr className="text-left text-text-3 text-[11.5px]">
+              <th className="px-4 py-2 font-medium">이름</th>
+              <th className="px-4 py-2 font-medium">구분</th>
+              <th className="px-4 py-2 font-medium">주소</th>
+              <th className="px-4 py-2 font-medium hidden md:table-cell">섹션</th>
+              <th className="px-4 py-2 font-medium hidden md:table-cell">마지막 수정</th>
+              <th className="px-4 py-2 font-medium text-right">작업</th>
+            </tr>
+          </thead>
+          <tbody>
+            {serverProjects.map((project) => (
+              <PageRow key={project.id} project={project} isHome={project.isHome ?? project.serverId === homeId} onOpen={onOpen} />
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
+function AiUsageCard({ usage, limit }: { usage: AiUsageEntry[]; limit?: number }) {
+  return (
+    <div className="bg-bg-1 border border-border-default rounded-xl">
+      <div className="px-4 py-3">
+        <h2 className="text-text-0 text-[15px] font-semibold">{limit ? '최근 AI 수정 요청' : 'AI 수정 기록'}</h2>
+      </div>
+      {usage.length === 0 ? (
+        <div className="px-4 py-6 text-text-3 text-[12.5px] border-t border-border-default">아직 AI로 수정한 기록이 없습니다.</div>
+      ) : (
+        <ul>
+          {usage.slice(0, limit ?? usage.length).map((item) => (
+            <li key={item.id} className="flex items-center gap-3 px-4 py-2.5 border-t border-border-default">
+              <span className={`shrink-0 px-2 py-0.5 rounded-full text-[11px] ${item.status === 'success' ? 'bg-green/15 text-green' : 'bg-bg-3 text-text-2'}`}>
+                {aiStatusKo[item.status] ?? item.status}
+              </span>
+              <span className="flex-1 text-text-1 text-[13px] truncate">{item.prompt}</span>
+              <span className="shrink-0 text-text-3 text-[11.5px]">{formatDate(item.createdAt)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 export function Dashboard() {
   const navigate = useNavigate()
   const projects = useProjectsStore((s) => s.projects)
-  const setConfig = useConfigStore((s) => s.setConfig)
-  const setActiveProject = useEditorStore((s) => s.setActiveProject)
   const [homeId, setHomeId] = useState<number | null>(null)
   const [usage, setUsage] = useState<AiUsageEntry[]>([])
   const [showNew, setShowNew] = useState(false)
@@ -301,10 +452,8 @@ export function Dashboard() {
   const monthPrefix = new Date().toISOString().slice(0, 7)
   const aiThisMonth = usage.filter((item) => String(item.createdAt).startsWith(monthPrefix)).length
 
-  function openInEditor(project: Project) {
-    setActiveProject(project.id)
-    setConfig(project.config || defaultConfig)
-    navigate('/editor')
+  function openPage(project: Project) {
+    if (project.serverId) navigate(`/page/${project.serverId}`)
   }
 
   return (
@@ -337,7 +486,7 @@ export function Dashboard() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <SummaryCard icon={Globe} label="공개 중인 홈페이지" value={homeProject?.name ?? '없음'} hint={homeProject ? `${homeProject.blockCount}개 섹션` : '페이지를 만들면 공개됩니다'} />
+          <SummaryCard icon={Globe} label="메인 페이지" value={homeProject?.name ?? '없음'} hint={homeProject ? `${homeProject.blockCount}개 섹션` : '페이지를 만들면 공개됩니다'} />
           <SummaryCard icon={FileText} label="전체 페이지" value={`${serverProjects.length}개`} />
           <SummaryCard icon={Clock} label="마지막 수정" value={lastUpdated ? formatDate(lastUpdated) : '-'} />
           <SummaryCard icon={Bot} label="이번 달 AI 수정 요청" value={`${aiThisMonth}회`} />
@@ -352,10 +501,10 @@ export function Dashboard() {
             onClick={() => navigate('/')}
           />
           <QuickAction
-            icon={Pencil}
-            title="에디터로 자세히 수정"
-            description="섹션 추가, 순서 변경, 디자인을 바꿉니다."
-            onClick={() => (homeProject ? openInEditor(homeProject) : setShowNew(true))}
+            icon={FileText}
+            title="페이지 관리"
+            description="페이지를 열어 섹션을 추가하고 고칩니다."
+            onClick={() => navigate('/admin/pages')}
           />
           <QuickAction
             icon={Plus}
@@ -367,56 +516,80 @@ export function Dashboard() {
 
         {showNew && <NewPagePanel onClose={() => setShowNew(false)} />}
 
-        <div className="bg-bg-1 border border-border-default rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3">
-            <h2 className="text-text-0 text-[15px] font-semibold">페이지 목록</h2>
-            <span className="text-text-3 text-[12px]">가장 최근에 수정한 페이지가 홈페이지에 공개됩니다</span>
-          </div>
-          {serverProjects.length === 0 ? (
-            <div className="px-4 py-10 text-center text-text-2 text-[13px] border-t border-border-default">
-              아직 페이지가 없습니다. 새 페이지 만들기로 시작하세요.
-            </div>
-          ) : (
-            <table className="w-full">
-              <thead>
-                <tr className="text-left text-text-3 text-[11.5px]">
-                  <th className="px-4 py-2 font-medium">이름</th>
-                  <th className="px-4 py-2 font-medium">상태</th>
-                  <th className="px-4 py-2 font-medium hidden md:table-cell">섹션</th>
-                  <th className="px-4 py-2 font-medium hidden md:table-cell">마지막 수정</th>
-                  <th className="px-4 py-2 font-medium text-right">작업</th>
-                </tr>
-              </thead>
-              <tbody>
-                {serverProjects.map((project) => (
-                  <PageRow key={project.id} project={project} isHome={project.serverId === homeId} onOpen={openInEditor} />
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+        <PageListCard homeId={homeId} onOpen={openPage} />
 
-        <div className="bg-bg-1 border border-border-default rounded-xl">
-          <div className="px-4 py-3">
-            <h2 className="text-text-0 text-[15px] font-semibold">최근 AI 수정 요청</h2>
-          </div>
-          {usage.length === 0 ? (
-            <div className="px-4 py-6 text-text-3 text-[12.5px] border-t border-border-default">아직 AI로 수정한 기록이 없습니다.</div>
-          ) : (
-            <ul>
-              {usage.slice(0, 5).map((item) => (
-                <li key={item.id} className="flex items-center gap-3 px-4 py-2.5 border-t border-border-default">
-                  <span className={`shrink-0 px-2 py-0.5 rounded-full text-[11px] ${item.status === 'success' ? 'bg-green/15 text-green' : 'bg-bg-3 text-text-2'}`}>
-                    {aiStatusKo[item.status] ?? item.status}
-                  </span>
-                  <span className="flex-1 text-text-1 text-[13px] truncate">{item.prompt}</span>
-                  <span className="shrink-0 text-text-3 text-[11.5px]">{formatDate(item.createdAt)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <AiUsageCard usage={usage} limit={5} />
       </div>
     </div>
+  )
+}
+
+// 좌측 메뉴의 공통 화면 틀: 제목, 설명, 오른쪽 버튼
+function AdminScreen({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+  return (
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-[1080px] mx-auto px-6 py-8 space-y-6">
+        <div>
+          <h1 className="text-text-0 text-[24px] font-bold mb-1">{title}</h1>
+          <p className="text-text-2 text-[13.5px]">{description}</p>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+export function PagesScreen() {
+  const navigate = useNavigate()
+  const [homeId, setHomeId] = useState<number | null>(null)
+  const [showNew, setShowNew] = useState(false)
+
+  useEffect(() => {
+    fetchPublicHome().then((data) => setHomeId(data.page?.id ?? null)).catch(() => {})
+  }, [])
+
+  function openPage(project: Project) {
+    if (project.serverId) navigate(`/page/${project.serverId}`)
+  }
+
+  return (
+    <AdminScreen title="페이지 관리" description="페이지를 만들고, 이름을 바꾸고, 복제하거나 삭제합니다.">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setShowNew(true)}
+          className="h-9 px-3.5 rounded-lg bg-green text-black text-[13px] font-semibold inline-flex items-center gap-1.5"
+        >
+          <Plus size={14} />
+          새 페이지 만들기
+        </button>
+      </div>
+      {showNew && <NewPagePanel onClose={() => setShowNew(false)} />}
+      <PageListCard homeId={homeId} onOpen={openPage} />
+    </AdminScreen>
+  )
+}
+
+export function AiHistoryScreen() {
+  const [usage, setUsage] = useState<AiUsageEntry[]>([])
+
+  useEffect(() => {
+    fetchAiUsage().then((data) => setUsage(data.usage)).catch(() => {})
+  }, [])
+
+  return (
+    <AdminScreen title="AI 수정 기록" description="AI에게 요청한 수정 내용을 최근 50개까지 보여 줍니다.">
+      <AiUsageCard usage={usage} />
+    </AdminScreen>
+  )
+}
+
+export function FilesScreen() {
+  return (
+    <AdminScreen title="파일 관리자" description="홈페이지에 쓸 이미지를 올리고 관리합니다. 페이지 수정 중 이미지를 더블클릭해도 여기서 고를 수 있습니다.">
+      <div className="bg-bg-1 border border-border-default rounded-xl p-5">
+        <FileManagerPanel />
+      </div>
+    </AdminScreen>
   )
 }

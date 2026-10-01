@@ -1,9 +1,10 @@
 import { ImageIcon } from 'lucide-react'
 import type { BlockConfig } from '../types'
 
-function Placeholder({ className }: { className?: string }) {
+// imageProp: 페이지에서 바로 수정할 때 빈 이미지 칸을 더블클릭하면 이 prop 에 이미지를 넣는다.
+function Placeholder({ className, imageProp }: { className?: string; imageProp?: string }) {
   return (
-    <div className={`bg-gradient-to-br from-bg-3 to-bg-4 flex items-center justify-center ${className || ''}`}>
+    <div data-image-prop={imageProp} className={`bg-gradient-to-br from-bg-3 to-bg-4 flex items-center justify-center ${className || ''}`}>
       <ImageIcon size={32} className="text-text-3" />
     </div>
   )
@@ -21,7 +22,7 @@ export function ImageBlock({ block }: { block: BlockConfig }) {
   if (variant === 'side-by-side') {
     const imgEl = src
       ? <img src={src} alt={alt} className="w-full h-full object-cover rounded-lg" />
-      : <Placeholder className="w-full h-64 @lg:h-80 rounded-lg" />
+      : <Placeholder className="w-full h-64 @lg:h-80 rounded-lg" imageProp="src" />
 
     return (
       <div className="px-6 py-12 @lg:px-16 @lg:py-16">
@@ -51,7 +52,7 @@ export function ImageBlock({ block }: { block: BlockConfig }) {
             <div key={i} className={`reveal-scale reveal-d${Math.min(i + 2, 8)} aspect-square rounded-lg overflow-hidden`}>
               {img.src
                 ? <img src={img.src} alt={img.alt || ''} className="w-full h-full object-cover" />
-                : <Placeholder className="w-full h-full" />
+                : <Placeholder className="w-full h-full" imageProp={`images.${i}.src`} />
               }
             </div>
           ))}
@@ -65,7 +66,7 @@ export function ImageBlock({ block }: { block: BlockConfig }) {
     <div className="reveal-scale reveal-d1 relative">
       {src
         ? <img src={src} alt={alt} className="w-full h-64 @lg:h-96 object-cover" />
-        : <Placeholder className="w-full h-64 @lg:h-96" />
+        : <Placeholder className="w-full h-64 @lg:h-96" imageProp="src" />
       }
       {(title || subtitle) && (
         <div className="absolute inset-0 bg-gradient-to-t from-bg-0/80 to-transparent flex flex-col justify-end p-6 @lg:p-12">

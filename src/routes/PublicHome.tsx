@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useParams } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { RenderBlock } from '@/blocks/registry'
 import type { SiteConfig } from '@/blocks/types'
-import { fetchPublicHome, getToken, toProject, type SavedPage } from '@/lib/builderApi'
+import { fetchPublicHome, fetchPublicPage, fetchSavedPage, getToken, toProject, type SavedPage } from '@/lib/builderApi'
 import { resolveTheme, themeToCSS } from '@/lib/theme-presets'
 import { useGoogleFonts } from '@/lib/useGoogleFonts'
 import { useConfigStore } from '@/store/configStore'
@@ -25,8 +25,10 @@ function loadIntoEditor(page: SavedPage) {
   useConfigStore.getState().setConfig(page.config)
 }
 
-export function PublicHome() {
-  const navigate = useNavigate()
+/** 페이지 하나를 실제 화면 그대로 보여 주고, 관리자에게는 바로 수정 도구를 붙인다. */
+function SiteView({
+  load, autoEdit, emptyTitle = '아직 공개된 페이지가 없습니다', emptyText = '관리자가 페이지를 저장하면 이곳에 표시됩니다.',
+}: { load: () => Promise<SavedPage | null>; autoEdit?: boolean; emptyTitle?: string; emptyText?: string }) {
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [editing, setEditing] = useState(false)
   const isAdmin = !!getToken()
@@ -34,9 +36,15 @@ export function PublicHome() {
 
   useEffect(() => {
     let cancelled = false
-    fetchPublicHome()
-      .then((data) => {
-        if (!cancelled) setState({ status: 'ready', page: data.page })
+    load()
+      .then((page) => {
+        if (cancelled) return
+        setState({ status: 'ready', page })
+        // 페이지 메뉴에서 [수정]으로 들어오면 바로 편집 상태로 연다.
+        if (autoEdit && page) {
+          loadIntoEditor(page)
+          setEditing(true)
+        }
       })
       .catch(() => {
         if (!cancelled) setState({ status: 'error' })
@@ -44,7 +52,7 @@ export function PublicHome() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [load, autoEdit])
 
   const page = state.status === 'ready' ? state.page : null
   const config: SiteConfig | undefined = editing ? editingConfig : page?.config
@@ -70,15 +78,6 @@ export function PublicHome() {
     }
     loadIntoEditor(page)
     setEditing(true)
-  }
-
-  function openFullEditor() {
-    if (!page) {
-      navigate('/admin')
-      return
-    }
-    if (!editing) loadIntoEditor(page)
-    navigate('/editor')
   }
 
   return (
@@ -107,17 +106,17 @@ export function PublicHome() {
         ) : (
           <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
             <p className="text-[18px] font-semibold mb-1" style={{ color: 'var(--color-text-0)' }}>
-              아직 공개된 페이지가 없습니다
+              {emptyTitle}
             </p>
             <p className="text-[13px]" style={{ color: 'var(--color-text-2)' }}>
-              관리자가 페이지를 저장하면 이곳에 표시됩니다.
+              {emptyText}
             </p>
           </div>
         ))}
       </div>
 
       {isAdmin ? (
-        <OnPageToolbar editing={editing} onToggleEditing={toggleEditing} onOpenEditor={openFullEditor} />
+        <OnPageToolbar editing={editing} canEdit={!!page} onToggleEditing={toggleEditing} />
       ) : (
         <VisitorLoginButton />
       )}
@@ -136,5 +135,37 @@ export function PublicHome() {
         />
       )}
     </>
+  )
+}
+
+const loadHome = () => fetchPublicHome().then((data) => data.page)
+
+export function PublicHome() {
+  return <SiteView load={loadHome} />
+}
+
+/** /page/:id 관리자 전용. 홈에 공개되지 않은 페이지도 실제 화면에서 바로 수정한다. */
+export function PageView() {
+  const { id } = useParams()
+  const pageId = Number(id)
+  const load = useMemo(() => () => fetchSavedPage(pageId).then((data) => data.page), [pageId])
+  if (!getToken()) return <Navigate to="/login" replace />
+  return <SiteView key={pageId} load={load} autoEdit />
+}
+
+/** /about 처럼 서브 페이지 주소로 들어온 방문자에게 그 페이지를 보여 준다. */
+export function PublicSubPage() {
+  const { slug = '' } = useParams()
+  const load = useMemo(
+    () => () => fetchPublicPage(slug).then((data) => data.page).catch(() => null),
+    [slug],
+  )
+  return (
+    <SiteView
+      key={slug}
+      load={load}
+      emptyTitle="페이지를 찾을 수 없습니다"
+      emptyText="주소가 바뀌었거나 삭제된 페이지입니다."
+    />
   )
 }

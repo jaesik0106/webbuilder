@@ -5,12 +5,13 @@ const dotenv = require("dotenv");
 dotenv.config();
 
 const pool = require("./db/pool");
-const { initDb } = require("./db/init");
+const { initDb, migrateDb } = require("./db/init");
 const { ensureAdmin } = require("./services/authService");
 const authRoutes = require("./routes/auth");
 const pageRoutes = require("./routes/pages");
 const aiRoutes = require("./routes/ai");
 const publicRoutes = require("./routes/public");
+const files = require("./routes/files");
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
@@ -21,6 +22,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/pages", pageRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/public", publicRoutes);
+app.use("/api/files", files.router);
+app.use("/uploads", express.static(files.UPLOAD_DIR, { maxAge: "7d" }));
 
 app.get("/api/health", (req, res) => {
   res.json({
@@ -51,6 +54,7 @@ app.listen(port, async () => {
   try {
     await pool.query("SELECT 1");
     await initDb();
+    await migrateDb();
     await ensureAdmin();
     console.log("Database: connected");
   } catch (error) {

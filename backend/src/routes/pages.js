@@ -74,7 +74,12 @@ router.put("/:id", async (req, res) => {
   }
 
   try {
-    const page = await pageService.updatePage(req.user.id, req.params.id, req.body.name, config);
+    const page = await pageService.updatePage(req.user.id, req.params.id, {
+      name: req.body.name,
+      config,
+      slug: req.body.slug,
+      isHome: req.body.isHome,
+    });
     if (!page) {
       return res.status(404).json({ success: false, message: "페이지를 찾을 수 없습니다." });
     }
@@ -85,6 +90,9 @@ router.put("/:id", async (req, res) => {
       page,
     });
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ success: false, message: error.message });
+    }
     console.error("Update page failed", error.code || error.message);
     return res.status(500).json({ success: false, message: "페이지를 수정하지 못했습니다." });
   }

@@ -42,4 +42,25 @@ async function initDb() {
   `);
 }
 
-module.exports = { initDb };
+// 이미 만들어진 pages 테이블에 메인/서브 페이지 구분 칸을 추가한다.
+async function addColumnIfMissing(table, column, definition) {
+  const [rows] = await pool.query(
+    "SELECT COUNT(*) AS count FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?",
+    [table, column]
+  );
+  if (rows[0].count === 0) {
+    await pool.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
+async function migrateDb() {
+  await addColumnIfMissing("pages", "slug", "VARCHAR(60) NULL UNIQUE AFTER name");
+  await addColumnIfMissing("pages", "is_home", "TINYINT(1) NOT NULL DEFAULT 0 AFTER slug");
+  await pool.query("UPDATE pages SET slug = CONCAT('page-', id) WHERE slug IS NULL");
+  const [[{ count }]] = await pool.query("SELECT COUNT(*) AS count FROM pages WHERE is_home = 1");
+  if (count === 0) {
+    await pool.query("UPDATE pages SET is_home = 1 ORDER BY updated_at DESC LIMIT 1");
+  }
+}
+
+module.exports = { initDb, migrateDb };

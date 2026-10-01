@@ -1,16 +1,13 @@
 import { useEffect } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast, Toaster } from 'sonner'
-import { TopNav } from './TopNav'
-import { ShortcutsModal } from '@/editor/ShortcutsModal'
+import { AdminSidebar, AdminTopBar } from './AdminSidebar'
 import { getToken, listSavedPages, toProject } from '@/lib/builderApi'
 import { useProjectsStore } from '@/store/projectsStore'
-import { useKeyboardShortcuts } from '@/lib/useKeyboardShortcuts'
 
 export function AppLayout() {
   const location = useLocation()
   const navigate = useNavigate()
-  useKeyboardShortcuts()
 
   useEffect(() => {
     let cancelled = false
@@ -35,12 +32,18 @@ export function AppLayout() {
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
       <a href="#main-content" className="skip-to-content">Skip to content</a>
-      <TopNav />
-      <main id="main-content" className="flex-1 mt-12 overflow-hidden" role="main">
-        <div key={location.pathname} className="h-full animate-fade-in-up">
-          <Outlet />
+      {/* 관리자 화면은 기존 10PAGE 관리자와 같은 톤(흰 바탕, 파란 상단 바, 왼쪽 메뉴). */}
+      <div className="admin-light flex-1 flex overflow-hidden bg-bg-0 text-text-0">
+        <AdminSidebar />
+        <div className="flex-1 flex flex-col min-w-0">
+          <AdminTopBar />
+          <main id="main-content" className="flex-1 overflow-hidden" role="main">
+            <div key={location.pathname} className="h-full">
+              <Outlet />
+            </div>
+          </main>
         </div>
-      </main>
+      </div>
       <Toaster
         position="bottom-center"
         toastOptions={{
@@ -52,7 +55,6 @@ export function AppLayout() {
           },
         }}
       />
-      <ShortcutsModal />
     </div>
   )
 }

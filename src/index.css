@@ -248,3 +248,36 @@ textarea:focus-visible {
   top: 0;
   outline: none;
 }
+
+/* 관리자 화면(대시보드, 페이지 관리, 설정, 로그인)은 기존 10PAGE 관리자와 같은 톤:
+   흰 바탕, 파란색(#1c54e4) 강조, Pretendard 글꼴. 에디터는 그대로 어두운 화면을 쓴다.
+   기존 색상 토큰을 이 영역 안에서만 바꿔서, 컴포넌트 코드는 고치지 않는다. */
+.admin-light {
+  --color-bg-0: #f5f6f8;
+  --color-bg-1: #ffffff;
+  --color-bg-2: #f3f4f6;
+  --color-bg-3: #e9ecef;
+  --color-bg-4: #dee2e6;
+  --color-bg-5: #ced4da;
+  --color-border-default: #e3e6ea;
+  --color-border-subtle: #eef0f2;
+  --color-border-hover: #c5cbd2;
+  --color-text-0: #363b3f;
+  --color-text-1: #555555;
+  --color-text-2: #6b7280;
+  --color-text-3: #9aa0a6;
+  --color-green: #1c54e4;
+  --color-green-dim: #1746c0;
+  --color-green-glow: rgba(28, 84, 228, 0.1);
+  --color-green-glow2: rgba(28, 84, 228, 0.05);
+  --color-accent-rgb: 28, 84, 228;
+  --font-sans: Pretendard, "Pretendard Variable", notokr, -apple-system, system-ui, sans-serif;
+  --font-display: Pretendard, "Pretendard Variable", notokr, system-ui, sans-serif;
+  font-family: var(--font-sans);
+}
+
+/* 파란 버튼 위 글자는 흰색 */
+.admin-light .bg-green.text-black,
+.admin-light .bg-green .text-black {
+  color: #ffffff;
+}

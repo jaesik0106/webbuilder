@@ -12,13 +12,13 @@ const defaultImages: GalleryImage[] = [
   { alt: 'Image 4' }, { alt: 'Image 5' }, { alt: 'Image 6' },
 ]
 
-function ImageCard({ image, tall }: { image: GalleryImage; tall?: boolean }) {
+function ImageCard({ image, tall, index }: { image: GalleryImage; tall?: boolean; index: number }) {
   return (
     <div className={`rounded-lg overflow-hidden border border-border-default group ${tall ? 'row-span-2' : ''}`}>
       {image.src ? (
         <img src={image.src} alt={image.alt || ''} className="w-full h-full object-cover" />
       ) : (
-        <div className="w-full h-full min-h-[140px] bg-gradient-to-br from-bg-3 to-bg-4 flex items-center justify-center">
+        <div data-image-prop={`images.${index}.src`} className="w-full h-full min-h-[140px] bg-gradient-to-br from-bg-3 to-bg-4 flex items-center justify-center">
           <ImageIcon size={24} className="text-text-3" />
         </div>
       )}
@@ -43,7 +43,7 @@ export function GalleryBlock({ block }: { block: BlockConfig }) {
         <div className="grid grid-cols-2 @lg:grid-cols-3 auto-rows-[160px] gap-3">
           {images.map((img, i) => (
             <div key={i} className={`reveal-scale reveal-d${Math.min(i + 2, 8)}`}>
-              <ImageCard image={img} tall={i % 3 === 0} />
+              <ImageCard image={img} tall={i % 3 === 0} index={i} />
             </div>
           ))}
         </div>
@@ -58,7 +58,7 @@ export function GalleryBlock({ block }: { block: BlockConfig }) {
       <div className="grid grid-cols-2 @lg:grid-cols-3 gap-3">
         {images.map((img, i) => (
           <div key={i} className={`reveal-scale reveal-d${Math.min(i + 2, 8)}`}>
-            <ImageCard image={img} />
+            <ImageCard image={img} index={i} />
           </div>
         ))}
       </div>

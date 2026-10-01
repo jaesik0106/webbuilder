@@ -24,13 +24,18 @@ export function findTextPath(value: unknown, text: string, path: PropPath = []):
 function setAt(target: unknown, path: PropPath, next: string): unknown {
   if (path.length === 0) return next
   const [head, ...rest] = path
-  if (Array.isArray(target)) {
-    const copy = [...target]
+  if (Array.isArray(target) || (typeof head === 'number' && target == null)) {
+    const copy = Array.isArray(target) ? [...target] : []
     copy[head as number] = setAt(copy[head as number], rest, next)
     return copy
   }
   const obj = (target ?? {}) as Record<string, unknown>
   return { ...obj, [head]: setAt(obj[head as string], rest, next) }
+}
+
+/** "images.0.src" 같은 문자열 경로를 PropPath 로 바꾼다. */
+export function parsePropPath(value: string): PropPath {
+  return value.split('.').map((part) => (/^\d+$/.test(part) ? Number(part) : part))
 }
 
 /** 최상위 prop 하나만 바꾼 결과를 돌려준다 (updateBlockProps 에 그대로 넘길 수 있게). */

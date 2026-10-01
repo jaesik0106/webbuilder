@@ -1,21 +1,89 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  ArrowUp, ArrowDown, CopyPlus, Trash2, GripHorizontal, MousePointerClick, PanelRight, Sparkles, Undo2, Redo2, Pencil, LayoutDashboard, LogOut, X,
+  ArrowUp, ArrowDown, CopyPlus, Trash2, GripHorizontal, MousePointerClick, PanelRight, Sparkles, Undo2, Redo2, Plus, LayoutDashboard, LogOut, X,
 } from 'lucide-react'
 import { RenderBlock } from '@/blocks/registry'
-import type { BlockConfig } from '@/blocks/types'
+import type { BlockConfig, BlockType } from '@/blocks/types'
 import { blockMetadata } from '@/lib/block-metadata'
 import { clearToken } from '@/lib/builderApi'
 import { useConfigStore } from '@/store/configStore'
 import { useEditorStore } from '@/store/editorStore'
+import { useProjectsStore } from '@/store/projectsStore'
 import { RightSidebar } from './RightSidebar'
 import { ReviseBar } from './ReviseBar'
 import { useAutoSaveToProject } from './useAutoSaveToProject'
-import { findTextPath, patchForPath } from './inlineText'
+import { findTextPath, parsePropPath, patchForPath, type PropPath } from './inlineText'
+import { FileManagerModal } from './FileManager'
+import { uploadImages } from '@/lib/uploadImages'
 import { useDraggablePosition } from './useDraggablePosition'
 
-const blockLabels = new Map(blockMetadata.map((m) => [m.type, m.label]))
+const blockLabelsKo: Partial<Record<BlockType, string>> = {
+  navbar: '상단 메뉴', hero: '메인 배너', features: '특징 소개', pricing: '가격표', cta: '행동 유도',
+  footer: '하단 정보', testimonials: '고객 후기', stats: '숫자 통계', faq: '자주 묻는 질문', team: '팀 소개',
+  contact: '문의하기', newsletter: '소식 받기', logocloud: '로고 모음', divider: '구분선', banner: '띠 배너',
+  content: '글 내용', image: '이미지', video: '동영상', gallery: '갤러리',
+}
+const blockLabels = new Map(blockMetadata.map((m) => [m.type, blockLabelsKo[m.type] ?? m.label]))
+
+function newBlockId(type: string) {
+  return `block-${type}-${Date.now().toString(36)}`
+}
+
+/** 새 섹션을 고르는 목록. 선택한 섹션 바로 아래, 없으면 하단 정보 위에 넣는다. */
+function AddSectionPanel({ onClose }: { onClose: () => void }) {
+  const addBlock = useConfigStore((s) => s.addBlock)
+  const selectBlock = useEditorStore((s) => s.selectBlock)
+  const selectedBlockId = useEditorStore((s) => s.selectedBlockId)
+
+  function add(type: BlockType) {
+    const meta = blockMetadata.find((m) => m.type === type)
+    if (!meta) return
+    const blocks = useConfigStore.getState().getActivePageBlocks()
+    const selectedIndex = blocks.findIndex((b) => b.id === selectedBlockId)
+    const footerIndex = blocks.findIndex((b) => b.type === 'footer')
+    const index = selectedIndex >= 0 ? selectedIndex + 1 : footerIndex >= 0 ? footerIndex : blocks.length
+    const block: BlockConfig = {
+      id: newBlockId(type),
+      type,
+      variant: meta.variants[0],
+      props: structuredClone(meta.defaultProps),
+    }
+    addBlock(block, index)
+    selectBlock(block.id)
+    onClose()
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-block-id="${block.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }
+
+  return (
+    <div className="fixed left-1/2 top-14 -translate-x-1/2 z-[61] w-[min(560px,calc(100vw-32px))] max-h-[70vh] overflow-y-auto rounded-xl bg-bg-1 border border-border-default shadow-[0_8px_32px_rgba(0,0,0,0.45)] p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-text-0 text-[14px] font-semibold">섹션 추가</h2>
+        <button type="button" aria-label="닫기" onClick={onClose} className="w-7 h-7 rounded-md flex items-center justify-center text-text-3 hover:text-text-0 hover:bg-bg-3">
+          <X size={14} />
+        </button>
+      </div>
+      <p className="text-text-2 text-[12px] mb-3">
+        {selectedBlockId ? '선택한 섹션 바로 아래에 추가됩니다.' : '페이지 맨 아래(하단 정보 위)에 추가됩니다.'}
+      </p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {blockMetadata.map((meta) => (
+          <button
+            key={meta.type}
+            type="button"
+            onClick={() => add(meta.type)}
+            className="text-left rounded-lg p-3 bg-bg-2 border border-border-default hover:border-green"
+          >
+            <div className="text-text-0 text-[13px] font-medium">{blockLabels.get(meta.type)}</div>
+            <div className="text-text-3 text-[11px] leading-snug line-clamp-2">{meta.description}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // 클릭한 곳에서 글자만 들어 있는 가장 안쪽 요소를 찾는다.
 function textLeaf(target: HTMLElement, root: HTMLElement): HTMLElement | null {
@@ -53,6 +121,28 @@ function EditableBlock({
   const duplicateBlock = useConfigStore((s) => s.duplicateBlock)
   const moveBlock = useConfigStore((s) => s.moveBlock)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [imagePath, setImagePath] = useState<PropPath | null>(null)
+  // 메인 페이지를 고칠 때는 메인 폴더, 서브 페이지는 서브 폴더에 올린다.
+  const activeProjectId = useEditorStore((s) => s.activeProjectId)
+  const folder = useProjectsStore((s) =>
+    s.projects.find((project) => project.id === activeProjectId)?.isHome === false ? 'sub' : 'main',
+  )
+  const [dropActive, setDropActive] = useState(false)
+
+  // 더블클릭하거나 파일을 놓은 곳이 어떤 이미지 prop 인지 찾는다.
+  // 이미 있는 이미지는 src 값으로, 빈 이미지 칸은 블록이 붙여 둔 data-image-prop 으로 찾는다.
+  function imagePathAt(target: HTMLElement): PropPath | null {
+    if (target.closest('[data-editor-ui]')) return null
+    const el = target.closest<HTMLElement>('[data-image-prop], img')
+    if (!el) return null
+    if (el.dataset.imageProp) return parsePropPath(el.dataset.imageProp)
+    const src = el.getAttribute('src')
+    return src ? findTextPath(block.props, src) : null
+  }
+
+  function setImage(path: PropPath, url: string) {
+    updateBlockProps(block.id, patchForPath(block.props, path, url))
+  }
 
   function startInlineEdit(leaf: HTMLElement) {
     const original = leaf.textContent?.trim() ?? ''
@@ -105,9 +195,33 @@ function EditableBlock({
       className={`relative group/edit cursor-pointer outline-offset-[-2px] ${
         selected ? 'outline outline-2 outline-[#22c55e]' : 'hover:outline hover:outline-2 hover:outline-[#22c55e]/50'
       }`}
+      onDoubleClick={(event) => {
+        const path = imagePathAt(event.target as HTMLElement)
+        if (!path) return
+        event.preventDefault()
+        selectBlock(block.id)
+        setImagePath(path)
+      }}
+      onDragOver={(event) => {
+        if (!event.dataTransfer.types.includes('Files')) return
+        if (!imagePathAt(event.target as HTMLElement)) return
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'copy'
+        setDropActive(true)
+      }}
+      onDragLeave={() => setDropActive(false)}
+      onDrop={async (event) => {
+        setDropActive(false)
+        const path = imagePathAt(event.target as HTMLElement)
+        if (!path || event.dataTransfer.files.length === 0) return
+        event.preventDefault()
+        selectBlock(block.id)
+        const [file] = await uploadImages([event.dataTransfer.files[0]], folder)
+        if (file) setImage(path, file.url)
+      }}
       onClickCapture={(event) => {
         const target = event.target as HTMLElement
-        if (target.dataset.inlineEditing || target.closest('[data-section-actions]')) return
+        if (target.dataset.inlineEditing || target.closest('[data-section-actions], [data-editor-ui]')) return
         // 편집 중에는 링크와 버튼이 이동하거나 제출되지 않게 막는다.
         event.preventDefault()
         event.stopPropagation()
@@ -160,6 +274,21 @@ function EditableBlock({
         </div>
       )}
       <RenderBlock block={block} />
+      {dropActive && (
+        <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center bg-[#1c54e4]/15 outline-2 outline-dashed outline-[#1c54e4] -outline-offset-4">
+          <span className="px-3 py-1.5 rounded-full bg-[#1c54e4] text-white text-[12px] font-semibold">여기에 놓으면 이미지가 바뀝니다</span>
+        </div>
+      )}
+      {imagePath && (
+        <FileManagerModal
+          initialFolder={folder}
+          onClose={() => setImagePath(null)}
+          onPick={(url) => {
+            setImage(imagePath, url)
+            setImagePath(null)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -210,10 +339,11 @@ function ToolButton({
  * 테마 CSS 변수가 걸린 사이트 영역 밖에 두어야 관리자 다크 테마가 유지된다.
  */
 export function OnPageToolbar({
-  editing, onToggleEditing, onOpenEditor,
-}: { editing: boolean; onToggleEditing: () => void; onOpenEditor: () => void }) {
+  editing, canEdit, onToggleEditing,
+}: { editing: boolean; canEdit: boolean; onToggleEditing: () => void }) {
   const navigate = useNavigate()
   const [panelOpen, setPanelOpen] = useState(true)
+  const [addOpen, setAddOpen] = useState(false)
   const { ref: toolbarRef, position: toolbarPos, onHandlePointerDown } = useDraggablePosition('webbuilder-toolbar-pos')
   const [aiOpen, setAiOpen] = useState(false)
   const undo = useConfigStore((s) => s.undo)
@@ -241,11 +371,14 @@ export function OnPageToolbar({
         >
           <GripHorizontal size={14} />
         </button>
-        <ToolButton label={editing ? '편집 끝내기' : '이 페이지 바로 수정'} active={editing} onClick={onToggleEditing}>
+        <ToolButton label={editing ? '편집 끝내기' : '이 페이지 바로 수정'} active={editing} disabled={!canEdit} onClick={onToggleEditing}>
           <MousePointerClick size={16} />
         </ToolButton>
         {editing && (
           <>
+            <ToolButton label="섹션 추가" active={addOpen} onClick={() => setAddOpen(!addOpen)}>
+              <Plus size={16} />
+            </ToolButton>
             <ToolButton label="속성, 디자인 패널" active={panelOpen} onClick={() => setPanelOpen(!panelOpen)}>
               <PanelRight size={16} />
             </ToolButton>
@@ -261,9 +394,6 @@ export function OnPageToolbar({
           </>
         )}
         <div className="w-6 h-px bg-border-default my-1" />
-        <ToolButton label="이 페이지 수정 (전체 에디터)" onClick={onOpenEditor}>
-          <Pencil size={16} />
-        </ToolButton>
         <ToolButton label="대시보드" onClick={() => navigate('/admin')}>
           <LayoutDashboard size={16} />
         </ToolButton>
@@ -281,9 +411,11 @@ export function OnPageToolbar({
       {editing && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 px-3 py-1.5 rounded-full bg-bg-1/95 border border-border-default text-[12px] text-text-1 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
           <span className="w-1.5 h-1.5 rounded-full bg-green" />
-          편집 모드 · 글자를 눌러 바로 고치고, 고친 내용은 자동 저장됩니다
+          편집 모드 · 글자는 눌러서, 이미지는 더블클릭하거나 끌어다 놓아서 바꿉니다 · 자동 저장
         </div>
       )}
+
+      {editing && addOpen && <AddSectionPanel onClose={() => setAddOpen(false)} />}
 
       {editing && aiOpen && (
         <div className="fixed top-14 left-1/2 -translate-x-1/2 z-[60] w-[min(640px,calc(100vw-120px))] rounded-xl overflow-hidden border border-border-default shadow-[0_8px_32px_rgba(0,0,0,0.45)]">

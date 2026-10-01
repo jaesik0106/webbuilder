@@ -1,0 +1,20 @@
+# 배포 시 사이트 루트에 .htaccess 로 올라간다.
+Options -Indexes
+DirectoryIndex index.html
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # 일부 아파치(CGI) 환경에서 Authorization 헤더가 PHP 로 전달되지 않는 문제 방지
+  RewriteCond %{HTTP:Authorization} .
+  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+  # /api/... 는 PHP 백엔드로
+  RewriteRule ^api/ api/index.php [L,QSA]
+
+  # 나머지 주소(/admin, /editor 등)는 React 앱으로
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . index.html [L]
+</IfModule>

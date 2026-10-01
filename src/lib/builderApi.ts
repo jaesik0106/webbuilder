@@ -1,7 +1,8 @@
 import type { SiteConfig } from '@/blocks/types'
 import { useProjectsStore, type Project } from '@/store/projectsStore'
 
-const API_BASE = 'http://localhost:3001'
+// 개발 중에는 로컬 Express(3001), 배포본은 같은 서버의 /api (PHP) 를 쓴다.
+const API_BASE = import.meta.env.VITE_API_BASE ?? (import.meta.env.DEV ? 'http://localhost:3001' : '')
 const TOKEN_KEY = 'webbuilder-token'
 
 export interface AuthUser {
@@ -12,6 +13,8 @@ export interface AuthUser {
 export interface SavedPage {
   id: number
   name: string
+  slug: string | null
+  isHome: boolean
   config: SiteConfig
   createdAt: string
   updatedAt: string
@@ -70,11 +73,61 @@ export function toProject(page: SavedPage): Project {
     id: `server-${page.id}`,
     serverId: page.id,
     name: page.name,
+    slug: page.slug ?? undefined,
+    isHome: page.isHome,
     status: 'draft',
     updatedAt: page.updatedAt,
     blockCount,
     config,
   }
+}
+
+export function fetchPublicPage(slug: string) {
+  return request<{ success: boolean; page: SavedPage }>(`/api/public/pages/${encodeURIComponent(slug)}`)
+}
+
+/** 페이지 주소(slug)를 바꾸거나 메인 페이지로 지정한다. */
+export function updatePageMeta(serverId: number, meta: { slug?: string; isHome?: boolean }) {
+  return request<{ success: boolean; page: SavedPage }>(`/api/pages/${serverId}`, {
+    method: 'PUT',
+    body: JSON.stringify(meta),
+  })
+}
+
+// ---- 파일관리자 ----
+
+export type FileFolder = 'main' | 'sub'
+
+export interface UploadedFile {
+  name: string
+  folder: FileFolder
+  url: string
+  size: number
+  createdAt: string
+}
+
+export function listFiles(folder?: FileFolder) {
+  return request<{ success: boolean; files: UploadedFile[] }>(folder ? `/api/files?folder=${folder}` : '/api/files')
+}
+
+export async function uploadFile(file: File, folder: FileFolder = 'main') {
+  const token = getToken()
+  const response = await fetch(`${API_BASE}/api/files?folder=${folder}&name=${encodeURIComponent(file.name)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': file.type || 'application/octet-stream', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: file,
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(data.message || '파일을 올리지 못했습니다.')
+  return (data as { file: UploadedFile }).file
+}
+
+export function deleteFile(folder: FileFolder, name: string) {
+  return request<{ success: boolean }>(`/api/files/${folder}/${encodeURIComponent(name)}`, { method: 'DELETE' })
+}
+
+export function fetchSavedPage(id: number) {
+  return request<{ success: boolean; page: SavedPage }>(`/api/pages/${id}`)
 }
 
 export function listSavedPages() {

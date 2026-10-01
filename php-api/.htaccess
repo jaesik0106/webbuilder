@@ -1,0 +1,10 @@
+# config.php 와 내부 파일은 주소로 직접 열 수 없게 막는다.
+<FilesMatch "^(config|lib|ai|files)\.php$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>

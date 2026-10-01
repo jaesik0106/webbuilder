@@ -7,6 +7,7 @@ interface HeroProps {
   subheadline: string
   primaryCta: string
   secondaryCta?: string
+  image?: string
 }
 
 function HeroCentered({ props }: { props: HeroProps }) {
@@ -79,10 +80,16 @@ function HeroSplit({ props }: { props: HeroProps }) {
       {/* Visual side */}
       <div className="reveal-fade-up reveal-d3 flex-1 w-full">
         <div className="aspect-[4/3] rounded-xl bg-bg-2 border border-border-default overflow-hidden relative">
-          <div className="absolute inset-0 bg-gradient-to-br from-green/5 to-transparent" />
-          <div className="absolute inset-6 border border-dashed border-border-default rounded-lg flex items-center justify-center text-text-3 text-sm">
-            Preview
-          </div>
+          {props.image ? (
+            <img src={props.image} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          ) : (
+            <>
+              <div className="absolute inset-0 bg-gradient-to-br from-green/5 to-transparent" />
+              <div data-image-prop="image" className="absolute inset-6 border border-dashed border-border-default rounded-lg flex items-center justify-center text-text-3 text-sm">
+                Preview
+              </div>
+            </>
+          )}
         </div>
       </div>
     </section>

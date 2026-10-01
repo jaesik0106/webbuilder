@@ -31,3 +31,5 @@ WORKPLAN-*.md
 .env
 .env.*
 !.env.example
+php-api/config.php
+deploy/

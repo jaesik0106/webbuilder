@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenPage: Open-Source AI Website Builder | JSON-First Architecture</title>
+    <meta name="description" content="OpenPage is an open-source website builder that uses JSON as the single source of truth. Visual drag-and-drop editor, AI site generation, 19 block types, 42 variants, 10 themes. Self-hosted, MIT licensed." />
+    <meta name="keywords" content="open source website builder, AI website builder, JSON website builder, drag and drop editor, landing page builder, self-hosted website builder, Framer alternative, Lovable alternative, React website builder" />
+    <meta name="author" content="Building Open" />
+    <link rel="canonical" href="https://openpage-phi.vercel.app" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="OpenPage: Open-Source AI Website Builder" />
+    <meta property="og:description" content="Open-source website builder where JSON is the source of truth. Visual drag-and-drop editor + AI generation + 19 block types + standalone HTML export. Self-hosted, MIT licensed." />
+    <meta property="og:url" content="https://openpage-phi.vercel.app" />
+    <meta property="og:site_name" content="OpenPage" />
+    <meta property="og:image" content="https://raw.githubusercontent.com/buildingopen/openpage/main/docs/editor-screenshot.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="OpenPage open-source website builder showing the visual drag-and-drop editor with block layers, live canvas preview, and theme presets" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="OpenPage: Open-Source AI Website Builder" />
+    <meta name="twitter:description" content="JSON-first website builder. Visual editor + AI generation. 19 block types, 42 variants, 10 themes. Self-hosted, MIT licensed." />
+    <meta name="twitter:image" content="https://raw.githubusercontent.com/buildingopen/openpage/main/docs/editor-screenshot.png" />
+
+    <!-- Structured Data: SoftwareApplication -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "OpenPage",
+      "description": "OpenPage is an open-source website builder that uses JSON as the single source of truth. It combines a visual drag-and-drop editor with AI-powered site generation, producing websites described by a structured, typed JSON config.",
+      "applicationCategory": "DeveloperApplication",
+      "applicationSubCategory": "Website Builder",
+      "operatingSystem": "Any",
+      "url": "https://openpage-phi.vercel.app",
+      "downloadUrl": "https://github.com/buildingopen/openpage",
+      "screenshot": "https://raw.githubusercontent.com/buildingopen/openpage/main/docs/editor-screenshot.png",
+      "softwareVersion": "1.0.0",
+      "license": "https://opensource.org/licenses/MIT",
+      "isAccessibleForFree": true,
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "programmingLanguage": ["TypeScript", "React"],
+      "codeRepository": "https://github.com/buildingopen/openpage",
+      "author": {
+        "@type": "Organization",
+        "name": "Building Open",
+        "url": "https://github.com/buildingopen"
+      },
+      "featureList": [
+        "Visual drag-and-drop editor with real-time preview",
+        "AI website generation from text prompts via Gemini",
+        "19 block types with 42 layout variants",
+        "10 built-in theme presets with full customization",
+        "One-click HTML export to standalone files",
+        "JSON-first architecture for predictable edits",
+        "Self-hosted and open source under MIT license",
+        "Structured API for AI agent integration"
+      ]
+    }
+    </script>
+
+    <!-- Structured Data: FAQPage -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is OpenPage?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "OpenPage is an open-source website builder that uses a JSON-first architecture. Instead of generating code or storing designs in a proprietary format, every website is described by a single structured JSON document. A visual drag-and-drop editor lets you build pages by arranging blocks, while an AI endpoint can generate complete site configs from a text prompt."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is a JSON-first website builder?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "A JSON-first website builder stores the entire website as structured JSON data rather than as source code or in a proprietary visual format. Every element of the site is represented as typed, structured data. AI agents can make surgical edits via API, humans can edit visually, and the output is always clean and predictable."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How is OpenPage different from Framer?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Framer is a proprietary visual editor. OpenPage is open-source and self-hosted. The key architectural difference is that OpenPage uses JSON as the source of truth, making sites programmatically editable via API. Framer sites live in Framer's cloud; OpenPage sites are JSON files you own."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How is OpenPage different from Lovable or v0?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Lovable and v0 generate source code from prompts. Code generation is inherently fragile: LLMs hallucinate imports, produce inconsistent output, and create diffs that are hard to merge. OpenPage generates structured JSON instead of code, making AI output predictable and deterministic."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I self-host OpenPage?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. OpenPage is fully self-hostable. Clone the repo, run npm install and npm run dev, and the editor runs locally. The AI generation endpoint can be deployed as a Vercel serverless function or adapted to any backend."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How do I build a website with OpenPage?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Clone the repo, run npm install and npm run dev, and open the editor at localhost:5173. Click New Site, add blocks from the block picker, edit text inline, choose a theme, then click Export to download a standalone HTML file. For AI-assisted building, set a Gemini API key and describe your site in the prompt field."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How do I use OpenPage with AI agents?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "POST a JSON body with a prompt field to the /api/generate endpoint. The API returns a complete SiteConfig JSON object with theme and blocks. Your agent can modify this JSON programmatically and render it directly. The structured JSON schema ensures agents make precise, predictable edits."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is OpenPage free?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. OpenPage is released under the MIT license. You can use it for personal projects, commercial projects, or as a starting point for your own website builder. There are no usage limits, no paid tiers, and no telemetry."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What AI model does OpenPage use?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "OpenPage uses Google's Gemini model for AI site generation. The /api/generate endpoint sends a text prompt to Gemini with a system prompt describing the block schema, and receives back a complete site config as structured JSON. You can swap in any LLM that supports structured output."
+          }
+        }
+      ]
+    }
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@300;400;500&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

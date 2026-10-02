@@ -63,7 +63,7 @@ All from wireframes.html:
 
 ## Conventions
 
-- Editor screens: dark theme, green (#22c55e) accent
+- On-page editing chrome (toolbar, panels, selection, element bars): same light 10PAGE tone as admin (white panels, blue #1c54e4, Pretendard) via .admin-light; on-canvas outlines and bars use hard-coded #1c54e4 because they sit inside the site theme variables
 - Admin screens (dashboard, pages, settings, login): match the existing 10PAGE admin, white background, blue (#1c54e4) accent, Pretendard font, applied via the .admin-light token override in src/index.css
 - All blocks are Tailwind-only, no external CSS
 - Block components receive `{ block: BlockConfig }` as props

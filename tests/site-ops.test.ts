@@ -65,6 +65,38 @@ describe('applyOperations', () => {
     expect(page.blocks.map((b) => b.id)).toEqual(['nav', 'hero', 'foot'])
   })
 
+  it('updates and removes a nested element, not only top-level blocks', () => {
+    const nested: PageState = {
+      blocks: [
+        {
+          id: 'sec', type: 'section', variant: 'default', props: {},
+          children: [
+            {
+              id: 'area', type: 'container', variant: 'default', props: {},
+              children: [
+                { id: 't1', type: 'text', variant: 'default', props: { content: '이전 문장' } },
+                { id: 'img', type: 'image', variant: 'default', props: { alt: '사진' } },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    const { valid, rejected } = validateOperations(
+      [
+        { op: 'update_props', blockId: 't1', props: { content: '바뀐 문장' } },
+        { op: 'remove_block', blockId: 'img' },
+      ],
+      nested,
+    )
+    expect(rejected).toHaveLength(0)
+    const next = applyOperations(nested, valid)
+    const area = next.blocks[0].children![0]
+    expect(area.children!.map((child) => child.id)).toEqual(['t1'])
+    expect(area.children![0].props.content).toBe('바뀐 문장')
+    expect(nested.blocks[0].children![0].children![0].props.content).toBe('이전 문장')
+  })
+
   it('inserts a new block before a trailing footer by default, or after afterBlockId', () => {
     const before = applyOperations(page, [{ op: 'add_block', type: 'cta' }], () => 'c1')
     expect(before.blocks.map((b) => b.id)).toEqual(['nav', 'hero', 'c1', 'foot'])

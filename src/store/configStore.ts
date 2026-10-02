@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { produce } from 'immer'
 import type { BlockConfig, SiteConfig, ThemeConfig, PageConfig } from '@/blocks/types'
+import { cloneWithNewIds, containsNode, createElement, findNode } from '@/lib/element-tree'
 
 function ensurePages(config: SiteConfig): PageConfig[] {
   if (config.pages && config.pages.length > 0) return config.pages
@@ -36,6 +37,14 @@ interface ConfigState {
   removeBlock: (id: string) => void
   duplicateBlock: (id: string) => void
   moveBlock: (fromIndex: number, toIndex: number) => void
+  /** 기본 요소: 부모(section/container)의 children 에 노드를 넣는다. index 가 없으면 맨 뒤. */
+  addChild: (parentId: string, node: BlockConfig, index?: number) => void
+  /** 기본 요소: 노드를 다른(또는 같은) 부모의 index 위치로 옮긴다. */
+  moveNode: (id: string, toParentId: string, toIndex: number) => void
+  /** 같은 부모 아래의 요소들을 새 그룹(컨테이너)으로 묶는다. 묶은 그룹의 id 를 돌려준다. */
+  groupNodes: (ids: string[]) => string | null
+  /** 그룹(컨테이너)을 풀어 안의 요소들을 그 자리에 꺼내 놓는다. */
+  ungroupNode: (id: string) => void
   addPage: (name: string, path: string) => string
   removePage: (id: string) => void
   renamePage: (id: string, name: string) => void
@@ -178,7 +187,8 @@ export const useConfigStore = create<ConfigState>()(
           config: produce(withPages(state.config), (draft) => {
             const page = draft.pages!.find((p) => p.id === state.activePageId)
             if (!page) return
-            const block = page.blocks.find((b) => b.id === id)
+            // 최상위 블록뿐 아니라 section 안의 기본 요소도 id 로 찾는다.
+            const block = findNode(page.blocks, id)?.node
             if (block) Object.assign(block, updates)
             draft.blocks = page.blocks
           }),
@@ -190,7 +200,7 @@ export const useConfigStore = create<ConfigState>()(
           config: produce(withPages(state.config), (draft) => {
             const page = draft.pages!.find((p) => p.id === state.activePageId)
             if (!page) return
-            const block = page.blocks.find((b) => b.id === id)
+            const block = findNode(page.blocks, id)?.node
             if (block) Object.assign(block.props, props)
             draft.blocks = page.blocks
           }),
@@ -212,16 +222,37 @@ export const useConfigStore = create<ConfigState>()(
       removeBlock: (id) =>
         set((state) => ({
           ...pushUndo(state, 'Remove block'),
-          config: mutateActivePageBlocks(withPages(state.config), state.activePageId, (blocks) =>
-            blocks.filter((b) => b.id !== id),
-          ),
+          config: produce(withPages(state.config), (draft) => {
+            const page = draft.pages!.find((p) => p.id === state.activePageId)
+            if (!page) return
+            // 하위 children 은 노드와 함께 사라진다.
+            const found = findNode(page.blocks, id)
+            if (!found) return
+            const list = found.parent ? found.parent.children! : page.blocks
+            list.splice(found.index, 1)
+            draft.blocks = page.blocks
+          }),
         })),
 
       duplicateBlock: (id) =>
         set((state) => {
           const blocks = getPageBlocks(state.config, state.activePageId)
           const idx = blocks.findIndex((b) => b.id === id)
-          if (idx === -1) return state
+          if (idx === -1) {
+            // 기본 요소: 같은 부모 안 바로 뒤에 새 id 로 복제한다.
+            const found = findNode(blocks, id)
+            if (!found?.parent) return state
+            return {
+              ...pushUndo(state, 'Duplicate element'),
+              config: produce(withPages(state.config), (draft) => {
+                const page = draft.pages!.find((p) => p.id === state.activePageId)
+                const target = page && findNode(page.blocks, id)
+                if (!page || !target?.parent) return
+                target.parent.children!.splice(target.index + 1, 0, cloneWithNewIds(found.node))
+                draft.blocks = page.blocks
+              }),
+            }
+          }
           const original = blocks[idx]
           const clone: BlockConfig = {
             ...JSON.parse(JSON.stringify(original)),
@@ -245,6 +276,88 @@ export const useConfigStore = create<ConfigState>()(
             return blocks
           }),
         })),
+
+      addChild: (parentId, node, index) =>
+        set((state) => ({
+          ...pushUndo(state, 'Add element'),
+          config: produce(withPages(state.config), (draft) => {
+            const page = draft.pages!.find((p) => p.id === state.activePageId)
+            const parent = page && findNode(page.blocks, parentId)?.node
+            if (!page || !parent) return
+            parent.children = parent.children ?? []
+            if (index === undefined) parent.children.push(node)
+            else parent.children.splice(index, 0, node)
+            draft.blocks = page.blocks
+          }),
+        })),
+
+      moveNode: (id, toParentId, toIndex) =>
+        set((state) => {
+          const blocks = getPageBlocks(state.config, state.activePageId)
+          const moving = findNode(blocks, id)
+          const target = findNode(blocks, toParentId)
+          // 자기 자신이나 자기 하위로는 옮길 수 없다.
+          if (!moving?.parent || !target || !target.node.children || id === toParentId || containsNode(moving.node, toParentId)) return state
+          return {
+            ...pushUndo(state, 'Move element'),
+            config: produce(withPages(state.config), (draft) => {
+              const page = draft.pages!.find((p) => p.id === state.activePageId)
+              if (!page) return
+              const from = findNode(page.blocks, id)
+              const to = findNode(page.blocks, toParentId)?.node
+              if (!from?.parent || !to) return
+              const [node] = from.parent.children!.splice(from.index, 1)
+              to.children = to.children ?? []
+              to.children.splice(Math.min(toIndex, to.children.length), 0, node)
+              draft.blocks = page.blocks
+            }),
+          }
+        }),
+
+      groupNodes: (ids) => {
+        const blocks = getPageBlocks(get().config, get().activePageId)
+        const found = ids.map((id) => findNode(blocks, id))
+        const parentId = found[0]?.parent?.id
+        // 모두 같은 부모(섹션이나 그룹) 안에 있어야 묶을 수 있다.
+        if (!parentId || found.some((f) => !f || f.parent?.id !== parentId)) return null
+        const group = createElement('container')
+        group.props = { ...group.props, paddingLeft: 0, paddingRight: 0, maxWidth: '100%' }
+        set((state) => ({
+          ...pushUndo(state, 'Group elements'),
+          config: produce(withPages(state.config), (draft) => {
+            const page = draft.pages!.find((p) => p.id === state.activePageId)
+            const parent = page && findNode(page.blocks, parentId)?.node
+            if (!page || !parent?.children) return
+            const picked = parent.children.filter((child) => ids.includes(child.id))
+            const firstIndex = parent.children.findIndex((child) => ids.includes(child.id))
+            parent.children = parent.children.filter((child) => !ids.includes(child.id))
+            parent.children.splice(firstIndex, 0, { ...group, children: picked })
+            draft.blocks = page.blocks
+          }),
+        }))
+        return group.id
+      },
+
+      ungroupNode: (id) =>
+        set((state) => {
+          const blocks = getPageBlocks(state.config, state.activePageId)
+          const found = findNode(blocks, id)
+          // 그룹 안의 그룹은 언제나 풀 수 있다. 섹션 바로 아래의 그룹은 안이 모두 그룹일 때만 푼다
+          // (섹션 바로 아래에는 그룹만 두어 요소를 넣을 자리가 늘 있게 한다).
+          const parentOk = found?.parent?.type === 'container'
+            || (found?.parent?.type === 'section' && (found.node.children ?? []).length > 0 && found.node.children!.every((c) => c.type === 'container'))
+          if (!found?.parent || found.node.type !== 'container' || !parentOk) return state
+          return {
+            ...pushUndo(state, 'Ungroup'),
+            config: produce(withPages(state.config), (draft) => {
+              const page = draft.pages!.find((p) => p.id === state.activePageId)
+              const target = page && findNode(page.blocks, id)
+              if (!page || !target?.parent?.children) return
+              target.parent.children.splice(target.index, 1, ...(target.node.children ?? []))
+              draft.blocks = page.blocks
+            }),
+          }
+        }),
 
       addPage: (name, path) => {
         const id = `page-${Date.now()}`

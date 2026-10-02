@@ -10,6 +10,9 @@ DirectoryIndex index.html
   RewriteCond %{HTTP:Authorization} .
   RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
+  # 검색엔진용 파일은 사이트 설정에서 만든다
+  RewriteRule ^(robots\.txt|sitemap\.xml)$ api/index.php [L]
+
   # /api/... 는 PHP 백엔드로
   RewriteRule ^api/ api/index.php [L,QSA]
 

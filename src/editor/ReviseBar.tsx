@@ -3,7 +3,7 @@ import { Square, Check, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useConfigStore } from '@/store/configStore'
 import { useEditorStore } from '@/store/editorStore'
-import { ensureServerPage, proposeSiteEdits } from '@/lib/builderApi'
+import { ensureServerPage, proposeSiteEdits, saveAiRestorePoint } from '@/lib/builderApi'
 import { blockMetadata } from '@/lib/block-metadata'
 import { themePresets } from '@/lib/theme-presets'
 import {
@@ -20,6 +20,7 @@ const editCatalog = {
 }
 
 interface Proposal {
+  usageId?: number
   summary: string
   operations: SiteOperation[]
   descriptions: string[]
@@ -79,6 +80,7 @@ export function ReviseBar() {
         return
       }
       setProposal({
+        usageId: result.usageId,
         summary: result.summary || result.reply,
         operations: valid,
         descriptions: valid.map((op) => describeOperation(op, page)),
@@ -97,7 +99,7 @@ export function ReviseBar() {
     }
   }
 
-  function apply() {
+  async function apply() {
     if (!proposal) return
     // 제안 이후 사용자가 페이지를 직접 고쳤다면, 지금 페이지 기준으로 다시 검증한다.
     const page = currentPage()
@@ -107,14 +109,22 @@ export function ReviseBar() {
       setProposal(null)
       return
     }
+    const before = useConfigStore.getState().config
+    if (proposal.usageId) {
+      try {
+        await saveAiRestorePoint(proposal.usageId, before)
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : '되돌리기 정보를 저장하지 못했습니다. 수정은 적용합니다.')
+      }
+    }
     const next = applyOperations(page, valid)
     applyPageEdit(next.blocks, next.theme, 'AI 수정')
     setProposal(null)
-    toast.success('AI 수정을 적용했습니다. 실행 취소로 되돌릴 수 있습니다.')
+    toast.success('AI 수정을 적용했습니다. AI 수정 기록에서 이 수정 전으로 되돌릴 수 있습니다.')
   }
 
   return (
-    <div className="shrink-0 border-b border-border-default bg-bg-1">
+    <div className="flex flex-col-reverse bg-bg-1">
       <form onSubmit={submit} className="h-11 flex items-center gap-2 px-3">
         <input
           value={prompt}
@@ -129,14 +139,14 @@ export function ReviseBar() {
                 ? '선택한 섹션을 어떻게 수정할까요?'
                 : '이 페이지를 어떻게 수정할까요?'
           }
-          className="flex-1 h-8 px-3 rounded-lg bg-bg-2 border border-border-default text-[13px] text-text-0 placeholder:text-text-3 disabled:opacity-60 disabled:cursor-not-allowed"
+          className="flex-1 h-8 px-3 rounded-lg bg-bg-2 border border-border-default text-[15px] text-text-0 placeholder:text-text-3 disabled:opacity-60 disabled:cursor-not-allowed"
         />
         {pending ? (
           <button
             type="button"
             onClick={stop}
             aria-label="AI 수정 멈추기"
-            className="h-8 px-3 rounded-lg bg-bg-4 border border-border-default text-text-0 text-[12px] font-semibold flex items-center gap-1.5 hover:border-border-hover"
+            className="h-8 px-3 rounded-lg bg-bg-4 border border-border-default text-text-0 text-[14px] font-semibold flex items-center gap-1.5 hover:border-border-hover"
           >
             <Square size={10} fill="currentColor" />
             멈추기
@@ -145,7 +155,7 @@ export function ReviseBar() {
           <button
             type="submit"
             disabled={!prompt.trim()}
-            className="h-8 px-3 rounded-lg bg-green text-black text-[12px] font-semibold disabled:opacity-40"
+            className="h-8 px-3 rounded-lg bg-green text-black text-[14px] font-semibold disabled:opacity-40"
           >
             AI 수정
           </button>
@@ -157,21 +167,21 @@ export function ReviseBar() {
           <div className="rounded-lg border border-green/30 bg-green-glow px-3 py-2.5">
             <div className="flex items-start gap-3">
               <div className="flex-1 min-w-0">
-                {proposal.summary && <p className="text-[12.5px] text-text-0 mb-1">{proposal.summary}</p>}
-                <ul className="text-[11.5px] text-text-2 space-y-0.5">
+                {proposal.summary && <p className="text-[14.5px] text-text-0 mb-1">{proposal.summary}</p>}
+                <ul className="text-[13.5px] text-text-2 space-y-0.5">
                   {proposal.descriptions.map((text, index) => (
                     <li key={index}>• {text}</li>
                   ))}
                 </ul>
                 {proposal.skipped > 0 && (
-                  <p className="text-[11px] text-text-3 mt-1">적용할 수 없는 제안 {proposal.skipped}개는 뺐습니다.</p>
+                  <p className="text-[13px] text-text-3 mt-1">적용할 수 없는 제안 {proposal.skipped}개는 뺐습니다.</p>
                 )}
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setProposal(null)}
-                  className="h-7 px-2.5 rounded-md border border-border-default text-text-1 text-[12px] flex items-center gap-1 hover:border-border-hover hover:text-text-0"
+                  className="h-7 px-2.5 rounded-md border border-border-default text-text-1 text-[14px] flex items-center gap-1 hover:border-border-hover hover:text-text-0"
                 >
                   <X size={12} />
                   취소
@@ -179,7 +189,7 @@ export function ReviseBar() {
                 <button
                   type="button"
                   onClick={apply}
-                  className="h-7 px-2.5 rounded-md bg-green text-black text-[12px] font-semibold flex items-center gap-1"
+                  className="h-7 px-2.5 rounded-md bg-green text-black text-[14px] font-semibold flex items-center gap-1"
                 >
                   <Check size={12} />
                   적용

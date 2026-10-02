@@ -95,13 +95,47 @@ function init_db(PDO $pdo): void
         $pdo->exec('UPDATE pages SET is_home = 1 ORDER BY updated_at DESC LIMIT 1');
     }
 
+    $usageColumns = $pdo->query('SHOW COLUMNS FROM ai_usage')->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('before_config', $usageColumns, true)) {
+        $pdo->exec('ALTER TABLE ai_usage ADD COLUMN before_config LONGTEXT NULL AFTER status');
+    }
+
+    // 계정 권한: developer(제작자, 코드 편집과 계정 관리) / admin(고객 관리자, 노코드 편집만).
+    // 칸을 처음 만들 때 있던 계정은 제작사가 쓰던 계정이므로 제작자로 둔다. (Express 와 같음)
+    $userColumns = $pdo->query('SHOW COLUMNS FROM users')->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('role', $userColumns, true)) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'admin' AFTER password_hash");
+        $pdo->exec("UPDATE users SET role = 'developer'");
+    }
+
+    // 제작자 계정: 제작자가 하나도 없으면 config 의 DEVELOPER_EMAIL / DEVELOPER_PASSWORD 로 만든다.
+    $devEmail = normalize_email((string) config_value('DEVELOPER_EMAIL', ''));
+    $devPassword = (string) config_value('DEVELOPER_PASSWORD', '');
+    if ($devEmail !== '' && validate_credentials($devEmail, $devPassword) === null) {
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE role = 'developer' OR email = ?");
+        $stmt->execute([$devEmail]);
+        if ((int) $stmt->fetchColumn() === 0) create_account($pdo, $devEmail, $devPassword, 'developer');
+    }
+
+    // 고객 관리자 계정: 계정이 하나도 없을 때만 만든다.
     $count = (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
     $email = normalize_email((string) config_value('ADMIN_EMAIL', ''));
     $password = (string) config_value('ADMIN_PASSWORD', '');
     if ($count === 0 && validate_credentials($email, $password) === null) {
-        $stmt = $pdo->prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)');
-        $stmt->execute([$email, password_hash($password, PASSWORD_BCRYPT)]);
+        create_account($pdo, $email, $password, 'admin');
     }
+}
+
+function normalize_role($role): string
+{
+    return $role === 'developer' ? 'developer' : 'admin';
+}
+
+function create_account(PDO $pdo, string $email, string $password, $role): int
+{
+    $stmt = $pdo->prepare('INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)');
+    $stmt->execute([$email, password_hash($password, PASSWORD_BCRYPT), normalize_role($role)]);
+    return (int) $pdo->lastInsertId();
 }
 
 function normalize_email(string $email): string
@@ -164,7 +198,17 @@ function require_auth(): array
 {
     $payload = jwt_verify(bearer_token());
     if (!$payload || !isset($payload['userId'])) fail(401, '로그인이 필요합니다.');
-    return ['id' => (int) $payload['userId'], 'email' => (string) ($payload['email'] ?? '')];
+    return ['id' => (int) $payload['userId'], 'email' => (string) ($payload['email'] ?? ''), 'role' => normalize_role($payload['role'] ?? '')];
+}
+
+// 제작자 전용 (계정 관리, 코드 편집). 토큰이 아니라 DB 의 현재 권한으로 확인한다.
+function require_developer(): array
+{
+    $user = require_auth();
+    $stmt = db()->prepare('SELECT role FROM users WHERE id = ? LIMIT 1');
+    $stmt->execute([$user['id']]);
+    if ($stmt->fetchColumn() !== 'developer') fail(403, '제작자 계정만 할 수 있습니다.');
+    return $user;
 }
 
 // ---- 페이지 ----

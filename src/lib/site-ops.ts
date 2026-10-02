@@ -38,6 +38,50 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
 
+function findBlock(blocks: BlockConfig[], id: string): BlockConfig | null {
+  for (const block of blocks) {
+    if (block.id === id) return block
+    if (block.children) {
+      const found = findBlock(block.children, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+function indexBlocks(blocks: BlockConfig[], ids: Set<string>, typeById: Map<string, string>) {
+  for (const block of blocks) {
+    ids.add(block.id)
+    typeById.set(block.id, block.type)
+    if (block.children) indexBlocks(block.children, ids, typeById)
+  }
+}
+
+function updateInTree(blocks: BlockConfig[], id: string, change: (block: BlockConfig) => BlockConfig): BlockConfig[] {
+  return blocks.map((block) => {
+    if (block.id === id) return change(block)
+    if (!block.children) return block
+    return { ...block, children: updateInTree(block.children, id, change) }
+  })
+}
+
+function removeFromTree(blocks: BlockConfig[], id: string): BlockConfig[] {
+  return blocks
+    .filter((block) => block.id !== id)
+    .map((block) => (block.children ? { ...block, children: removeFromTree(block.children, id) } : block))
+}
+
+function moveInTree(blocks: BlockConfig[], id: string, toIndex: number): BlockConfig[] {
+  const from = blocks.findIndex((block) => block.id === id)
+  if (from >= 0) {
+    const next = [...blocks]
+    const [moved] = next.splice(from, 1)
+    next.splice(Math.min(toIndex, next.length), 0, moved)
+    return next
+  }
+  return blocks.map((block) => (block.children ? { ...block, children: moveInTree(block.children, id, toIndex) } : block))
+}
+
 function sanitizeTheme(raw: Record<string, unknown>): Partial<ThemeConfig> {
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(raw)) {
@@ -58,8 +102,9 @@ export function validateOperations(rawOps: unknown, page: PageState): Validation
   const rejected: ValidationResult['rejected'] = []
   if (!Array.isArray(rawOps)) return { valid, rejected: [{ op: rawOps, reason: 'operations must be an array' }] }
 
-  const ids = new Set(page.blocks.map((b) => b.id))
-  const typeById = new Map(page.blocks.map((b) => [b.id, b.type]))
+  const ids = new Set<string>()
+  const typeById = new Map<string, string>()
+  indexBlocks(page.blocks, ids, typeById)
   const reject = (op: unknown, reason: string) => rejected.push({ op, reason })
 
   for (const raw of rawOps) {
@@ -94,7 +139,10 @@ export function validateOperations(rawOps: unknown, page: PageState): Validation
       }
       case 'remove_block': {
         if (typeof raw.blockId !== 'string' || !ids.has(raw.blockId)) { reject(raw, 'unknown blockId'); break }
-        ids.delete(raw.blockId)
+        const target = findBlock(page.blocks, raw.blockId)
+        const drop = new Set<string>([raw.blockId])
+        if (target) indexBlocks([target], drop, new Map())
+        for (const id of drop) ids.delete(id)
         valid.push({ op: 'remove_block', blockId: raw.blockId })
         break
       }
@@ -139,10 +187,10 @@ export function applyOperations(page: PageState, ops: SiteOperation[], makeId: (
   for (const op of ops) {
     switch (op.op) {
       case 'update_props':
-        blocks = blocks.map((b) => (b.id === op.blockId ? { ...b, props: { ...b.props, ...op.props } } : b))
+        blocks = updateInTree(blocks, op.blockId, (block) => ({ ...block, props: { ...block.props, ...op.props } }))
         break
       case 'set_variant':
-        blocks = blocks.map((b) => (b.id === op.blockId ? { ...b, variant: op.variant } : b))
+        blocks = updateInTree(blocks, op.blockId, (block) => ({ ...block, variant: op.variant }))
         break
       case 'add_block': {
         const meta = META.get(op.type)!
@@ -160,17 +208,11 @@ export function applyOperations(page: PageState, ops: SiteOperation[], makeId: (
         break
       }
       case 'remove_block':
-        blocks = blocks.filter((b) => b.id !== op.blockId)
+        blocks = removeFromTree(blocks, op.blockId)
         break
-      case 'move_block': {
-        const from = blocks.findIndex((b) => b.id === op.blockId)
-        if (from < 0) break
-        const next = [...blocks]
-        const [moved] = next.splice(from, 1)
-        next.splice(Math.min(op.toIndex, next.length), 0, moved)
-        blocks = next
+      case 'move_block':
+        blocks = moveInTree(blocks, op.blockId, op.toIndex)
         break
-      }
       case 'update_theme':
         theme = { ...(theme ?? {}), ...op.theme }
         break
@@ -187,9 +229,18 @@ export function applyOperations(page: PageState, ops: SiteOperation[], makeId: (
 /** Short Korean description of an operation, for the preview list shown to the customer. */
 export function describeOperation(op: SiteOperation, page: PageState): string {
   const label = (id: string) => {
-    const b = page.blocks.find((x) => x.id === id)
+    const b = findBlock(page.blocks, id)
     const meta = b ? META.get(b.type) : undefined
-    return meta ? `${meta.label} 섹션` : '새로 추가한 섹션'
+    if (meta) return `${meta.label} 섹션`
+    if (b?.type === 'text') {
+      const content = String(b.props.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 18)
+      return content ? `텍스트 "${content}"` : '텍스트'
+    }
+    if (b?.type === 'image') return '이미지'
+    if (b?.type === 'button') return `버튼 "${String(b.props.text || '버튼')}"`
+    if (b?.type === 'container') return '영역'
+    if (b?.type === 'section') return '섹션'
+    return b ? b.type : '새로 추가한 섹션'
   }
   switch (op.op) {
     case 'update_props': return `${label(op.blockId)} 내용 수정 (${Object.keys(op.props).join(', ')})`

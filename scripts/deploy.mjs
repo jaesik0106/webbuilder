@@ -54,7 +54,9 @@ const out = path.join(root, 'deploy')
 fs.rmSync(out, { recursive: true, force: true })
 copyDir(path.join(root, 'dist'), out)
 fs.mkdirSync(path.join(out, 'api'), { recursive: true })
-for (const file of ['index.php', 'lib.php', 'ai.php', 'files.php', '.htaccess']) {
+// php-api 의 PHP 파일 전부 (config.sample.php 는 견본이라 제외) + .htaccess
+const apiFiles = fs.readdirSync(path.join(root, 'php-api')).filter((name) => name.endsWith('.php') && name !== 'config.sample.php')
+for (const file of [...apiFiles, '.htaccess']) {
   fs.copyFileSync(path.join(root, 'php-api', file), path.join(out, 'api', file))
 }
 fs.copyFileSync(path.join(root, 'php-api', 'site.htaccess'), path.join(out, '.htaccess'))
@@ -68,6 +70,9 @@ const configKeys = {
   JWT_SECRET: prod('JWT_SECRET'),
   ADMIN_EMAIL: prod('ADMIN_EMAIL'),
   ADMIN_PASSWORD: prod('ADMIN_PASSWORD'),
+  DEVELOPER_EMAIL: prod('DEVELOPER_EMAIL'),
+  DEVELOPER_PASSWORD: prod('DEVELOPER_PASSWORD'),
+  STORAGE_QUOTA_MB: prod('STORAGE_QUOTA_MB', '0'),
   AI_PROVIDER: prod('AI_PROVIDER', 'gemini'),
   AI_API_KEY: prod('AI_API_KEY'),
   AI_MODEL: prod('AI_MODEL', 'claude-sonnet-4-5'),

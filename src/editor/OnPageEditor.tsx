@@ -1,18 +1,21 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  ArrowUp, ArrowDown, CopyPlus, Trash2, GripHorizontal, MousePointerClick, PanelRight, Sparkles, Undo2, Redo2, Plus, LayoutDashboard, LogOut, X,
+  ArrowUp, ArrowDown, CopyPlus, Trash2, GripHorizontal, MousePointerClick, PanelRight, Sparkles, Undo2, Redo2, Plus, Save, LayoutDashboard, LogOut, X,
 } from 'lucide-react'
 import { RenderBlock } from '@/blocks/registry'
 import type { BlockConfig, BlockType } from '@/blocks/types'
+import { createAddable, createBlankSection, findNode, targetContainerFor, type AddableType } from '@/lib/element-tree'
+import { ElementEditorProvider } from './ElementEditor'
 import { blockMetadata } from '@/lib/block-metadata'
 import { clearToken } from '@/lib/builderApi'
 import { useConfigStore } from '@/store/configStore'
-import { useEditorStore } from '@/store/editorStore'
+import { EDITOR_PANEL, useEditorStore } from '@/store/editorStore'
 import { useProjectsStore } from '@/store/projectsStore'
 import { RightSidebar } from './RightSidebar'
+import { LayersPanel } from './LayersPanel'
 import { ReviseBar } from './ReviseBar'
-import { useAutoSaveToProject } from './useAutoSaveToProject'
+import { isDirty, saveCurrentPage, useIsDirty } from './manualSave'
 import { findTextPath, parsePropPath, patchForPath, type PropPath } from './inlineText'
 import { FileManagerModal } from './FileManager'
 import { uploadImages } from '@/lib/uploadImages'
@@ -31,41 +34,99 @@ function newBlockId(type: string) {
 }
 
 /** 새 섹션을 고르는 목록. 선택한 섹션 바로 아래, 없으면 하단 정보 위에 넣는다. */
+const BASIC_ELEMENTS: { type: AddableType; label: string; english: string }[] = [
+  { type: 'text', label: '텍스트', english: 'Text' },
+  { type: 'image', label: '이미지', english: 'Image' },
+  { type: 'button', label: '버튼', english: 'Button' },
+  { type: 'area', label: '영역', english: 'Area (div)' },
+]
+
 function AddSectionPanel({ onClose }: { onClose: () => void }) {
   const addBlock = useConfigStore((s) => s.addBlock)
   const selectBlock = useEditorStore((s) => s.selectBlock)
   const selectedBlockId = useEditorStore((s) => s.selectedBlockId)
 
+  const addChild = useConfigStore((s) => s.addChild)
+  const blocks = useConfigStore((s) => s.getActivePageBlocks())
+  const targetContainer = targetContainerFor(blocks, selectedBlockId)
+
+  // 새 블록을 넣을 최상위 위치: 선택한 블록(또는 선택한 요소가 들어 있는 섹션) 바로 아래, 없으면 하단 정보 위.
+  function insertIndex() {
+    const current = useConfigStore.getState().getActivePageBlocks()
+    const selectedIndex = current.findIndex((b) => b.id === selectedBlockId || (selectedBlockId && b.children && findNode(b.children, selectedBlockId)))
+    const footerIndex = current.findIndex((b) => b.type === 'footer')
+    return selectedIndex >= 0 ? selectedIndex + 1 : footerIndex >= 0 ? footerIndex : current.length
+  }
+
+  function finish(id: string) {
+    selectBlock(id)
+    onClose()
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-block-id="${id}"], [data-element-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }
+
   function add(type: BlockType) {
     const meta = blockMetadata.find((m) => m.type === type)
     if (!meta) return
-    const blocks = useConfigStore.getState().getActivePageBlocks()
-    const selectedIndex = blocks.findIndex((b) => b.id === selectedBlockId)
-    const footerIndex = blocks.findIndex((b) => b.type === 'footer')
-    const index = selectedIndex >= 0 ? selectedIndex + 1 : footerIndex >= 0 ? footerIndex : blocks.length
     const block: BlockConfig = {
       id: newBlockId(type),
       type,
       variant: meta.variants[0],
       props: structuredClone(meta.defaultProps),
     }
-    addBlock(block, index)
-    selectBlock(block.id)
-    onClose()
-    requestAnimationFrame(() => {
-      document.querySelector(`[data-block-id="${block.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    })
+    addBlock(block, insertIndex())
+    finish(block.id)
+  }
+
+  function addBlankSection() {
+    const section = createBlankSection()
+    addBlock(section, insertIndex())
+    finish(section.id)
+  }
+
+  // 기본 요소: 선택한 컨테이너(또는 섹션의 첫 컨테이너)에 넣고, 없으면 새 빈 섹션을 만들어 그 안에 넣는다.
+  function addElement(type: AddableType) {
+    const element = createAddable(type)
+    if (targetContainer) {
+      addChild(targetContainer.id, element)
+    } else {
+      const section = createBlankSection()
+      section.children![0].children!.push(element)
+      addBlock(section, insertIndex())
+    }
+    finish(element.id)
   }
 
   return (
-    <div className="fixed left-1/2 top-14 -translate-x-1/2 z-[61] w-[min(560px,calc(100vw-32px))] max-h-[70vh] overflow-y-auto rounded-xl bg-bg-1 border border-border-default shadow-[0_8px_32px_rgba(0,0,0,0.45)] p-4">
+    <div className="admin-light fixed left-1/2 top-14 -translate-x-1/2 z-[61] w-[min(560px,calc(100vw-32px))] max-h-[70vh] overflow-y-auto rounded-xl bg-bg-1 border border-border-default shadow-[0_8px_32px_rgba(0,0,0,0.45)] p-4">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-text-0 text-[14px] font-semibold">섹션 추가</h2>
+        <h2 className="text-text-0 text-[16px] font-semibold">섹션 추가</h2>
         <button type="button" aria-label="닫기" onClick={onClose} className="w-7 h-7 rounded-md flex items-center justify-center text-text-3 hover:text-text-0 hover:bg-bg-3">
           <X size={14} />
         </button>
       </div>
-      <p className="text-text-2 text-[12px] mb-3">
+      <div className="text-[13px] font-semibold tracking-wide text-text-3 mb-1">기본 요소 · BASIC ELEMENTS</div>
+      <p className="text-text-2 text-[14px] mb-2">
+        {targetContainer
+          ? '선택한 컨테이너 안에 추가됩니다.'
+          : '텍스트·이미지·버튼·여백은 새 빈 섹션 안에 추가됩니다. 섹션이나 컨테이너를 먼저 선택하면 그 안에 들어갑니다.'}
+      </p>
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-5">
+        <button type="button" onClick={addBlankSection} className="rounded-lg p-3 bg-bg-2 border border-dashed border-green/60 hover:border-green text-left">
+          <div className="text-text-0 text-[15px] font-medium">빈 섹션</div>
+          <div className="text-text-3 text-[13px]">Blank Section</div>
+        </button>
+        {BASIC_ELEMENTS.map(({ type, label, english }) => (
+          <button key={type} type="button" onClick={() => addElement(type)} className="rounded-lg p-3 bg-bg-2 border border-border-default hover:border-green text-left">
+            <div className="text-text-0 text-[15px] font-medium">{label}</div>
+            <div className="text-text-3 text-[13px]">{english}</div>
+          </button>
+        ))}
+      </div>
+
+      <div className="text-[13px] font-semibold tracking-wide text-text-3 mb-1">프리셋 블록 · PRESET BLOCKS</div>
+      <p className="text-text-2 text-[14px] mb-2">
         {selectedBlockId ? '선택한 섹션 바로 아래에 추가됩니다.' : '페이지 맨 아래(하단 정보 위)에 추가됩니다.'}
       </p>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -76,8 +137,8 @@ function AddSectionPanel({ onClose }: { onClose: () => void }) {
             onClick={() => add(meta.type)}
             className="text-left rounded-lg p-3 bg-bg-2 border border-border-default hover:border-green"
           >
-            <div className="text-text-0 text-[13px] font-medium">{blockLabels.get(meta.type)}</div>
-            <div className="text-text-3 text-[11px] leading-snug line-clamp-2">{meta.description}</div>
+            <div className="text-text-0 text-[15px] font-medium">{blockLabels.get(meta.type)}</div>
+            <div className="text-text-3 text-[13px] leading-snug line-clamp-2">{meta.description}</div>
           </button>
         ))}
       </div>
@@ -105,7 +166,7 @@ function SectionButton({
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className="w-7 h-7 rounded-md flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 disabled:opacity-30"
+      className="w-7 h-7 rounded-md flex items-center justify-center text-[#4b5563] hover:text-[#1c54e4] hover:bg-[#eef3ff] disabled:opacity-30"
     >
       {children}
     </button>
@@ -128,6 +189,45 @@ function EditableBlock({
     s.projects.find((project) => project.id === activeProjectId)?.isHome === false ? 'sub' : 'main',
   )
   const [dropActive, setDropActive] = useState(false)
+  // 블록 안의 묶음(예: 상단 메뉴 링크 묶음, data-drag-prop)을 끌어서 왼쪽/가운데/오른쪽으로 옮기기
+  const [dragZone, setDragZone] = useState<'left' | 'center' | 'right' | null>(null)
+  const suppressClick = useRef(false)
+
+  function startZoneDrag(event: React.PointerEvent<HTMLDivElement>) {
+    const handle = (event.target as HTMLElement).closest<HTMLElement>('[data-drag-prop]')
+    if (!handle || event.button !== 0 || (event.target as HTMLElement).isContentEditable) return
+    const prop = handle.dataset.dragProp!
+    const wrapper = event.currentTarget
+    const startX = event.clientX
+    let moved = false
+    let zone: 'left' | 'center' | 'right' = 'center'
+
+    const onMove = (move: PointerEvent) => {
+      const dx = move.clientX - startX
+      if (!moved && Math.abs(dx) < 6) return
+      moved = true
+      handle.style.transform = `translateX(${dx}px)`
+      handle.style.opacity = '0.7'
+      const rect = wrapper.getBoundingClientRect()
+      const ratio = (move.clientX - rect.left) / rect.width
+      zone = ratio < 1 / 3 ? 'left' : ratio > 2 / 3 ? 'right' : 'center'
+      setDragZone(zone)
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      handle.style.transform = ''
+      handle.style.opacity = ''
+      setDragZone(null)
+      if (!moved) return
+      // 끈 뒤 손을 뗄 때 생기는 클릭이 글자 편집을 시작하지 않게 한 번 막는다.
+      suppressClick.current = true
+      selectBlock(block.id)
+      updateBlockProps(block.id, { [prop]: zone })
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
 
   // 더블클릭하거나 파일을 놓은 곳이 어떤 이미지 prop 인지 찾는다.
   // 이미 있는 이미지는 src 값으로, 빈 이미지 칸은 블록이 붙여 둔 data-image-prop 으로 찾는다.
@@ -192,9 +292,10 @@ function EditableBlock({
   return (
     <div
       data-block-id={block.id}
-      className={`relative group/edit cursor-pointer outline-offset-[-2px] ${
-        selected ? 'outline outline-2 outline-[#22c55e]' : 'hover:outline hover:outline-2 hover:outline-[#22c55e]/50'
+      className={`relative group/edit cursor-pointer outline-offset-[-2px] [&_[data-drag-prop]]:cursor-grab [&_[data-drag-prop]:hover]:outline-1 [&_[data-drag-prop]:hover]:outline-dashed [&_[data-drag-prop]:hover]:outline-[#1c54e4] [&_[data-drag-prop]]:transition-none ${
+        selected ? 'outline outline-2 outline-[#1c54e4]' : 'hover:outline hover:outline-1 hover:outline-[#1c54e4]/60'
       }`}
+      onPointerDown={startZoneDrag}
       onDoubleClick={(event) => {
         const path = imagePathAt(event.target as HTMLElement)
         if (!path) return
@@ -220,8 +321,14 @@ function EditableBlock({
         if (file) setImage(path, file.url)
       }}
       onClickCapture={(event) => {
+        if (suppressClick.current) {
+          suppressClick.current = false
+          event.preventDefault()
+          event.stopPropagation()
+          return
+        }
         const target = event.target as HTMLElement
-        if (target.dataset.inlineEditing || target.closest('[data-section-actions], [data-editor-ui]')) return
+        if (target.dataset.inlineEditing || target.closest('[data-section-actions], [data-editor-ui], [data-element-id]')) return
         // 편집 중에는 링크와 버튼이 이동하거나 제출되지 않게 막는다.
         event.preventDefault()
         event.stopPropagation()
@@ -231,7 +338,7 @@ function EditableBlock({
       }}
     >
       <span
-        className={`absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded bg-[#22c55e] text-[#09090b] text-[10px] font-semibold pointer-events-none ${
+        className={`absolute top-1 left-1 z-10 px-2 py-0.5 rounded-md bg-[#1c54e4] text-white text-[13px] font-medium shadow-sm pointer-events-none ${
           selected ? 'opacity-100' : 'opacity-0 group-hover/edit:opacity-100'
         }`}
       >
@@ -240,7 +347,7 @@ function EditableBlock({
       {selected && (
         <div
           data-section-actions
-          className="absolute top-1 right-1 z-20 flex items-center gap-0.5 p-0.5 rounded-lg bg-[#09090b]/90 border border-white/10 shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
+          className="absolute top-1 right-1 z-20 flex items-center gap-0.5 p-0.5 rounded-lg bg-white border border-[#e3e6ea] shadow-[0_4px_14px_rgba(15,23,42,0.14)]"
         >
           <SectionButton label="위로 옮기기" disabled={index === 0} onClick={() => moveBlock(index, index - 1)}>
             <ArrowUp size={13} />
@@ -264,8 +371,8 @@ function EditableBlock({
               selectBlock(null)
             }}
             onMouseLeave={() => setConfirmingDelete(false)}
-            className={`h-7 rounded-md flex items-center justify-center gap-1 text-[11.5px] font-medium ${
-              confirmingDelete ? 'px-2 bg-red-500 text-white' : 'w-7 text-white/80 hover:text-red-400 hover:bg-white/10'
+            className={`h-7 rounded-md flex items-center justify-center gap-1 text-[13.5px] font-medium ${
+              confirmingDelete ? 'px-2 bg-red-500 text-white' : 'w-7 text-[#4b5563] hover:text-red-500 hover:bg-red-50'
             }`}
           >
             <Trash2 size={13} />
@@ -274,9 +381,23 @@ function EditableBlock({
         </div>
       )}
       <RenderBlock block={block} />
+      {dragZone && (
+        <div className="absolute inset-0 z-10 pointer-events-none grid grid-cols-3">
+          {(['left', 'center', 'right'] as const).map((zone) => (
+            <div
+              key={zone}
+              className={`flex items-end justify-center pb-1 text-[13px] font-semibold border-x border-dashed border-[#1c54e4]/40 ${
+                dragZone === zone ? 'bg-[#1c54e4]/10 text-[#1c54e4]' : 'text-transparent'
+              }`}
+            >
+              {zone === 'left' ? '왼쪽' : zone === 'center' ? '가운데' : '오른쪽'}
+            </div>
+          ))}
+        </div>
+      )}
       {dropActive && (
         <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center bg-[#1c54e4]/15 outline-2 outline-dashed outline-[#1c54e4] -outline-offset-4">
-          <span className="px-3 py-1.5 rounded-full bg-[#1c54e4] text-white text-[12px] font-semibold">여기에 놓으면 이미지가 바뀝니다</span>
+          <span className="px-3 py-1.5 rounded-full bg-[#1c54e4] text-white text-[14px] font-semibold">여기에 놓으면 이미지가 바뀝니다</span>
         </div>
       )}
       {imagePath && (
@@ -297,9 +418,9 @@ function EditableBlock({
 export function EditableBlocks() {
   const blocks = useConfigStore((s) => s.getActivePageBlocks())
   const selectedBlockId = useEditorStore((s) => s.selectedBlockId)
-  useAutoSaveToProject()
 
   return (
+    <ElementEditorProvider>
     <main>
       {blocks.map((block, index) => (
         <EditableBlock
@@ -311,6 +432,7 @@ export function EditableBlocks() {
         />
       ))}
     </main>
+    </ElementEditorProvider>
   )
 }
 
@@ -325,8 +447,8 @@ function ToolButton({
       aria-pressed={active}
       disabled={disabled}
       onClick={onClick}
-      className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors disabled:opacity-30 ${
-        active ? 'bg-green text-black' : 'text-text-1 hover:bg-bg-3 hover:text-text-0'
+      className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors disabled:opacity-30 ${
+        active ? 'bg-green/10 text-green' : 'text-text-2 hover:bg-bg-2 hover:text-text-0'
       }`}
     >
       {children}
@@ -342,7 +464,24 @@ export function OnPageToolbar({
   editing, canEdit, onToggleEditing,
 }: { editing: boolean; canEdit: boolean; onToggleEditing: () => void }) {
   const navigate = useNavigate()
-  const [panelOpen, setPanelOpen] = useState(true)
+  const [panelOpen, setPanelOpen] = useState(false)
+  const selectedBlockId = useEditorStore((s) => s.selectedBlockId)
+  const selectionSeq = useEditorStore((s) => s.selectionSeq)
+  const [layersHiddenAt, setLayersHiddenAt] = useState(-1)
+  const showLayers = !!selectedBlockId && layersHiddenAt !== selectionSeq
+
+  // 요소를 누르면 레이어와 함께 디자인 패널도 연다. 같은 요소를 다시 눌러도 다시 열린다.
+  useEffect(() => {
+    if (selectedBlockId) setPanelOpen(true)
+  }, [selectedBlockId, selectionSeq])
+  const setCanvasInset = useEditorStore((s) => s.setCanvasInset)
+  const leftInset = showLayers ? EDITOR_PANEL.layer : 0
+  const rightInset = panelOpen ? EDITOR_PANEL.design : 0
+
+  // 펼친 패널 너비만큼 페이지를 안쪽으로 밀어, 편집 중에도 홈페이지 전체가 보이게 한다.
+  useEffect(() => {
+    setCanvasInset(leftInset, rightInset)
+  }, [leftInset, rightInset, setCanvasInset])
   const [addOpen, setAddOpen] = useState(false)
   const { ref: toolbarRef, position: toolbarPos, onHandlePointerDown } = useDraggablePosition('webbuilder-toolbar-pos')
   const [aiOpen, setAiOpen] = useState(false)
@@ -351,15 +490,61 @@ export function OnPageToolbar({
   const canUndo = useConfigStore((s) => s.undoStack.length > 0)
   const canRedo = useConfigStore((s) => s.redoStack.length > 0)
   const selectBlock = useEditorStore((s) => s.selectBlock)
+  const dirty = useIsDirty()
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    if (saving || !isDirty()) return
+    setSaving(true)
+    await saveCurrentPage()
+    setSaving(false)
+  }
+
+  function ensureEditing() {
+    if (!editing) onToggleEditing()
+  }
+
+  // Ctrl+S(⌘S)로 저장. 저장하지 않은 채 새로고침하거나 창을 닫으면 브라우저가 한 번 묻는다.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault()
+        void save()
+      }
+    }
+    function onBeforeUnload(event: BeforeUnloadEvent) {
+      if (!isDirty()) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('beforeunload', onBeforeUnload)
+    }
+  })
+
+  // 관리자 화면으로 나갈 때 저장하지 않은 변경이 있으면 확인한다.
+  function leave(go: () => void) {
+    if (editing && isDirty() && !window.confirm('저장하지 않은 변경이 있습니다. 저장하지 않고 나가면 변경 내용이 사라집니다. 나갈까요?')) return
+    go()
+  }
 
   return (
     <>
       <nav
         ref={toolbarRef}
         aria-label="관리자 편집 도구"
-        style={toolbarPos ? { left: toolbarPos.x, top: toolbarPos.y } : undefined}
-        className={`fixed z-[60] flex flex-col items-center gap-1 p-1.5 rounded-xl bg-bg-1/95 border border-border-default shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur ${
-          toolbarPos ? '' : 'left-4 bottom-4'
+        style={toolbarPos ? {
+          left: Math.min(
+            Math.max(toolbarPos.x, leftInset + 12),
+            Math.max(16, window.innerWidth - rightInset - 72),
+          ),
+          top: toolbarPos.y,
+        } : undefined}
+        className={`admin-light fixed z-[61] flex max-h-[calc(100dvh-2rem)] flex-col items-center gap-1 overflow-y-auto p-1.5 rounded-xl bg-bg-1 border border-border-default shadow-[0_8px_28px_rgba(15,23,42,0.16)] backdrop-blur ${
+          toolbarPos ? '' : showLayers ? 'left-[272px] bottom-4' : 'left-4 bottom-4'
         }`}
       >
         <button
@@ -369,74 +554,66 @@ export function OnPageToolbar({
           onPointerDown={onHandlePointerDown}
           className="w-9 h-5 flex items-center justify-center text-text-3 hover:text-text-0 cursor-grab active:cursor-grabbing touch-none"
         >
-          <GripHorizontal size={14} />
+          <GripHorizontal size={16} strokeWidth={2.5} />
         </button>
-        <ToolButton label={editing ? '편집 끝내기' : '이 페이지 바로 수정'} active={editing} disabled={!canEdit} onClick={onToggleEditing}>
-          <MousePointerClick size={16} />
-        </ToolButton>
         {editing && (
-          <>
-            <ToolButton label="섹션 추가" active={addOpen} onClick={() => setAddOpen(!addOpen)}>
-              <Plus size={16} />
-            </ToolButton>
-            <ToolButton label="속성, 디자인 패널" active={panelOpen} onClick={() => setPanelOpen(!panelOpen)}>
-              <PanelRight size={16} />
-            </ToolButton>
-            <ToolButton label="AI 수정" active={aiOpen} onClick={() => setAiOpen(!aiOpen)}>
-              <Sparkles size={16} />
-            </ToolButton>
-            <ToolButton label="실행 취소" disabled={!canUndo} onClick={undo}>
-              <Undo2 size={16} />
-            </ToolButton>
-            <ToolButton label="다시 실행" disabled={!canRedo} onClick={redo}>
-              <Redo2 size={16} />
-            </ToolButton>
-          </>
+          <div className="px-1 pb-0.5 text-center text-[12px] font-bold leading-tight text-[#1c54e4]">편집 모드</div>
         )}
+        <ToolButton label={editing ? '편집 끝내기' : '이 페이지 바로 수정'} active={editing} disabled={!canEdit} onClick={onToggleEditing}>
+          <MousePointerClick size={18} strokeWidth={2.5} />
+        </ToolButton>
+        <div className="relative">
+          <ToolButton label={dirty ? '저장 (Ctrl+S)' : '저장됨'} active={dirty} disabled={!dirty || saving} onClick={save}>
+            <Save size={18} strokeWidth={2.5} />
+          </ToolButton>
+          {dirty && <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-orange-400 ring-2 ring-bg-1" />}
+        </div>
+        <ToolButton label="섹션 추가" active={addOpen} onClick={() => { ensureEditing(); setAddOpen(!addOpen) }}>
+          <Plus size={18} strokeWidth={2.5} />
+        </ToolButton>
+        <ToolButton label="속성, 디자인 패널" active={panelOpen} onClick={() => { ensureEditing(); setPanelOpen(!panelOpen) }}>
+          <PanelRight size={18} strokeWidth={2.5} />
+        </ToolButton>
+        <ToolButton label="AI 수정" active={aiOpen} onClick={() => { ensureEditing(); setAiOpen(!aiOpen) }}>
+          <Sparkles size={18} strokeWidth={2.5} />
+        </ToolButton>
+        <ToolButton label="실행 취소" disabled={!canUndo} onClick={() => { ensureEditing(); undo() }}>
+          <Undo2 size={18} strokeWidth={2.5} />
+        </ToolButton>
+        <ToolButton label="다시 실행" disabled={!canRedo} onClick={() => { ensureEditing(); redo() }}>
+          <Redo2 size={18} strokeWidth={2.5} />
+        </ToolButton>
         <div className="w-6 h-px bg-border-default my-1" />
-        <ToolButton label="대시보드" onClick={() => navigate('/admin')}>
-          <LayoutDashboard size={16} />
+        <ToolButton label="대시보드" onClick={() => leave(() => navigate('/admin'))}>
+          <LayoutDashboard size={18} strokeWidth={2.5} />
         </ToolButton>
         <ToolButton
           label="로그아웃"
-          onClick={() => {
+          onClick={() => leave(() => {
             clearToken()
             window.location.href = '/'
-          }}
+          })}
         >
-          <LogOut size={16} />
+          <LogOut size={18} strokeWidth={2.5} />
         </ToolButton>
       </nav>
 
-      {editing && (
-        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 px-3 py-1.5 rounded-full bg-bg-1/95 border border-border-default text-[12px] text-text-1 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
-          <span className="w-1.5 h-1.5 rounded-full bg-green" />
-          편집 모드 · 글자는 눌러서, 이미지는 더블클릭하거나 끌어다 놓아서 바꿉니다 · 자동 저장
-        </div>
-      )}
+      {showLayers && <LayersPanel open onToggle={() => setLayersHiddenAt(selectionSeq)} />}
 
-      {editing && addOpen && <AddSectionPanel onClose={() => setAddOpen(false)} />}
+      {addOpen && <AddSectionPanel onClose={() => setAddOpen(false)} />}
 
-      {editing && aiOpen && (
-        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-[60] w-[min(640px,calc(100vw-120px))] rounded-xl overflow-hidden border border-border-default shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
+      {aiOpen && (
+        <div
+          className="admin-light fixed bottom-4 -translate-x-1/2 z-[62] max-h-[min(50vh,420px)] w-[min(640px,calc(100vw-120px))] overflow-y-auto rounded-xl border border-border-default shadow-[0_8px_32px_rgba(0,0,0,0.45)]"
+          style={{ left: `calc(${leftInset}px + (100vw - ${leftInset + rightInset}px) / 2)` }}
+        >
           <ReviseBar />
         </div>
       )}
 
-      {editing && panelOpen && (
-        <div className="fixed right-3 top-14 bottom-3 z-[60] flex rounded-xl overflow-hidden border border-border-default shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
-          <button
-            type="button"
-            aria-label="패널 닫기"
-            onClick={() => {
-              setPanelOpen(false)
-              selectBlock(null)
-            }}
-            className="absolute top-1.5 right-1.5 z-10 w-6 h-6 rounded-md flex items-center justify-center text-text-3 hover:text-text-0 hover:bg-bg-3"
-          >
-            <X size={13} />
-          </button>
-          <RightSidebar />
+      {panelOpen && (
+        <div className="admin-light fixed right-0 top-0 bottom-0 z-[60] flex border-l border-border-default bg-bg-1">
+          <RightSidebar onCollapse={() => setPanelOpen(false)} />
         </div>
       )}
     </>
@@ -453,5 +630,29 @@ export function VisitorLoginButton() {
     >
       <LogOut size={15} className="rotate-180" />
     </Link>
+  )
+}
+
+/** 편집을 끝낼 때 저장하지 않은 변경이 있으면 묻는 창. */
+export function UnsavedChangesDialog({
+  onSave, onDiscard, onCancel,
+}: { onSave: () => void; onDiscard: () => void; onCancel: () => void }) {
+  return (
+    <div data-editor-ui className="admin-light fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4" onClick={onCancel}>
+      <div
+        role="dialog"
+        aria-label="저장하지 않은 변경"
+        onClick={(event) => event.stopPropagation()}
+        className="w-[min(400px,100%)] rounded-xl bg-bg-1 border border-border-default p-5 shadow-2xl"
+      >
+        <h2 className="text-text-0 text-[17px] font-semibold mb-1">저장하지 않은 변경이 있습니다</h2>
+        <p className="text-text-2 text-[15px] mb-5">저장해야 홈페이지에 반영됩니다. 어떻게 할까요?</p>
+        <div className="flex flex-col gap-2">
+          <button type="button" onClick={onSave} className="h-9 rounded-lg bg-green text-black text-[15px] font-semibold">저장하고 끝내기</button>
+          <button type="button" onClick={onDiscard} className="h-9 rounded-lg border border-border-default text-text-1 text-[15px] hover:text-red-400">저장하지 않고 끝내기</button>
+          <button type="button" onClick={onCancel} className="h-9 rounded-lg text-text-2 text-[15px] hover:text-text-0">계속 편집</button>
+        </div>
+      </div>
+    </div>
   )
 }

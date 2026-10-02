@@ -9,6 +9,10 @@ return [
     'JWT_SECRET' => '',
     'ADMIN_EMAIL' => '',
     'ADMIN_PASSWORD' => '',
+    'DEVELOPER_EMAIL' => '',
+    'DEVELOPER_PASSWORD' => '',
+    // 파일관리자 사용 용량 한도 (MB, 0 = 표시 안 함)
+    'STORAGE_QUOTA_MB' => 0,
     'AI_PROVIDER' => 'gemini',
     'AI_API_KEY' => '',
     'AI_MODEL' => 'claude-sonnet-4-5',

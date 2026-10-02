@@ -18,6 +18,15 @@ export type BlockType =
   | 'image'
   | 'video'
   | 'gallery'
+  // 기본 요소 (Section > Container > Text/Image/Button/Spacer). 'image' 는 위 프리셋과 이름이 같지만,
+  // section 의 children 안에서는 기본 이미지 요소로 렌더링한다.
+  | 'section'
+  | 'container'
+  | 'text'
+  | 'button'
+  | 'spacer'
+
+export type ElementType = 'section' | 'container' | 'text' | 'image' | 'button' | 'spacer'
 
 export type BlockVariant = string
 
@@ -26,6 +35,8 @@ export interface BlockConfig {
   type: BlockType
   variant: BlockVariant
   props: Record<string, unknown>
+  /** section / container 만 가진다. 기존 프리셋 블록에는 없다 (하위 호환). */
+  children?: BlockConfig[]
 }
 
 export interface ThemeConfig {

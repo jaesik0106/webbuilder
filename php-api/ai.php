@@ -139,10 +139,11 @@ function ai_call_claude(string $instruction, string $content): array
     return ai_normalize($merged);
 }
 
-function ai_record(int $userId, int $pageId, string $prompt, string $provider, string $status): void
+function ai_record(int $userId, int $pageId, string $prompt, string $provider, string $status): int
 {
     $stmt = db()->prepare('INSERT INTO ai_usage (user_id, page_id, prompt, provider, status) VALUES (?, ?, ?, ?, ?)');
     $stmt->execute([$userId, $pageId, mb_substr($prompt, 0, 2000), $provider, $status]);
+    return (int) db()->lastInsertId();
 }
 
 function ai_propose(array $user, stdClass $body): void
@@ -175,19 +176,28 @@ function ai_propose(array $user, stdClass $body): void
 
     try {
         $proposal = $provider === 'gemini' ? ai_call_gemini($instruction, $content) : ai_call_claude($instruction, $content);
-        ai_record($user['id'], $saved['id'], $prompt, $provider, 'success');
+        $usageId = ai_record($user['id'], $saved['id'], $prompt, $provider, 'success');
     } catch (Throwable $error) {
         ai_record($user['id'], $saved['id'], $prompt, $provider, 'failed');
         error_log('Revise page failed: ' . $error->getMessage());
         fail(500, 'AI 수정에 실패했습니다.');
     }
 
-    send_json(200, ['success' => true] + $proposal);
+    send_json(200, ['success' => true, 'usageId' => $usageId] + $proposal);
+}
+
+function ai_latest_restorable_id(int $userId): ?int
+{
+    $stmt = db()->prepare('SELECT id FROM ai_usage WHERE user_id = ? AND before_config IS NOT NULL ORDER BY id DESC LIMIT 1');
+    $stmt->execute([$userId]);
+    $id = $stmt->fetchColumn();
+    return $id === false ? null : (int) $id;
 }
 
 function ai_usage(array $user): void
 {
-    $stmt = db()->prepare('SELECT id, page_id, prompt, provider, status, created_at FROM ai_usage WHERE user_id = ? ORDER BY id DESC LIMIT 50');
+    $restorableId = ai_latest_restorable_id($user['id']);
+    $stmt = db()->prepare('SELECT id, page_id, prompt, provider, status, created_at, before_config IS NOT NULL AS has_snapshot FROM ai_usage WHERE user_id = ? ORDER BY id DESC LIMIT 50');
     $stmt->execute([$user['id']]);
     $usage = array_map(fn ($row) => [
         'id' => (int) $row['id'],
@@ -196,6 +206,49 @@ function ai_usage(array $user): void
         'provider' => $row['provider'],
         'status' => $row['status'],
         'createdAt' => iso_date($row['created_at']),
+        'restorable' => $restorableId !== null && (int) $row['id'] === $restorableId && (int) $row['has_snapshot'] === 1,
     ], $stmt->fetchAll());
     send_json(200, ['success' => true, 'usage' => $usage]);
+}
+
+function ai_save_snapshot(array $user, int $usageId, stdClass $body): void
+{
+    $config = $body->config ?? null;
+    if ($error = validate_config($config)) fail(400, $error);
+    $json = encode_config($config);
+    if (strlen($json) > AI_MAX_PAGE_BYTES) fail(400, '페이지 내용이 너무 큽니다.');
+
+    $stmt = db()->prepare('SELECT id, status, before_config FROM ai_usage WHERE id = ? AND user_id = ? LIMIT 1');
+    $stmt->execute([$usageId, $user['id']]);
+    $row = $stmt->fetch();
+    if (!$row || $row['status'] !== 'success') fail(404, '수정 기록을 찾을 수 없습니다.');
+    if ($row['before_config'] === null || $row['before_config'] === '') {
+        $update = db()->prepare('UPDATE ai_usage SET before_config = ? WHERE id = ? AND user_id = ?');
+        $update->execute([$json, $usageId, $user['id']]);
+    }
+    send_json(200, ['success' => true]);
+}
+
+function ai_restore(array $user, int $usageId): void
+{
+    $restorableId = ai_latest_restorable_id($user['id']);
+    if ($restorableId !== $usageId) fail(409, '가장 최근 AI 수정만 취소할 수 있습니다.');
+
+    $stmt = db()->prepare('SELECT page_id, before_config FROM ai_usage WHERE id = ? AND user_id = ? LIMIT 1');
+    $stmt->execute([$usageId, $user['id']]);
+    $row = $stmt->fetch();
+    if (!$row || $row['before_config'] === null || $row['before_config'] === '') {
+        fail(404, '되돌릴 수정 기록을 찾을 수 없습니다.');
+    }
+    $config = json_decode($row['before_config']);
+    if ($error = validate_config($config)) fail(400, $error);
+
+    $pageId = (int) $row['page_id'];
+    $existing = get_page($pageId);
+    if (!$existing) fail(404, '페이지를 찾을 수 없습니다.');
+    $update = db()->prepare('UPDATE pages SET name = ?, config = ? WHERE id = ?');
+    $name = trim((string) ($config->name ?? '')) ?: $existing['name'];
+    $update->execute([$name, encode_config($config), $pageId]);
+    db()->prepare('DELETE FROM ai_usage WHERE id = ? AND user_id = ?')->execute([$usageId, $user['id']]);
+    send_json(200, ['success' => true, 'message' => 'AI 수정 전으로 되돌렸습니다.', 'page' => get_page($pageId)]);
 }

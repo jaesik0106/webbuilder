@@ -46,7 +46,7 @@
 }
 
 html {
-  font-size: 14px;
+  font-size: 16px;
 }
 
 body {
@@ -239,7 +239,7 @@ textarea:focus-visible {
   padding: 8px 16px;
   background: var(--color-green);
   color: #000;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   border-radius: 0 0 8px 8px;
   transition: top 0.2s;
@@ -274,10 +274,35 @@ textarea:focus-visible {
   --font-sans: Pretendard, "Pretendard Variable", notokr, -apple-system, system-ui, sans-serif;
   --font-display: Pretendard, "Pretendard Variable", notokr, system-ui, sans-serif;
   font-family: var(--font-sans);
+  color: var(--color-text-0);
 }
 
 /* 파란 버튼 위 글자는 흰색 */
 .admin-light .bg-green.text-black,
 .admin-light .bg-green .text-black {
   color: #ffffff;
+}
+
+/* 기본 요소의 격자(grid) 컨테이너. 칸 값은 인라인 --el-grid-cols 로 받는다.
+   페이지 영역(@container)이 640px 보다 좁으면 한 줄로 쌓는다 (data-stack-mobile="true"). */
+.el-grid {
+  grid-template-columns: var(--el-grid-cols, repeat(2, minmax(0, 1fr)));
+}
+@container (max-width: 640px) {
+  .el-grid[data-stack-mobile='true'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 기본 요소의 가로 배치(flex row) 컨테이너: 좁은 화면에서는 위아래로 쌓는다. */
+@container (max-width: 640px) {
+  .el-row[data-stack-mobile='true'] {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  /* 쌓였을 때 가로용 flex 값(너비 기준)이 높이로 바뀌지 않게 한다. 고정 너비는 그대로, 화면보다 넓으면 줄인다. */
+  .el-row[data-stack-mobile='true'] > * {
+    flex: 0 0 auto !important;
+    max-width: 100%;
+  }
 }

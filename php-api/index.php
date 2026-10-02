@@ -15,6 +15,8 @@ $method = $_SERVER['REQUEST_METHOD'];
 $uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $apiPos = strpos($uri, '/api/');
 $path = '/' . trim($apiPos === false ? '' : substr($uri, $apiPos + 5), '/');
+// /robots.txt, /sitemap.xml 은 .htaccess 가 이 파일로 보낸다
+if (in_array($uri, ['/robots.txt', '/sitemap.xml'], true)) $path = '/public' . $uri;
 
 try {
     if ($method === 'GET' && $path === '/health') {
@@ -33,19 +35,58 @@ try {
         $password = $body->password ?? '';
         if ($error = validate_credentials($email, $password)) fail(400, $error);
 
-        $stmt = db()->prepare('SELECT id, email, password_hash FROM users WHERE email = ? LIMIT 1');
+        $stmt = db()->prepare('SELECT id, email, password_hash, role FROM users WHERE email = ? LIMIT 1');
         $stmt->execute([$email]);
         $user = $stmt->fetch();
         // Node 의 bcryptjs 가 만든 $2a$/$2b$ 해시도 PHP password_verify 로 확인된다.
         if (!$user || !password_verify($password, $user['password_hash'])) {
             fail(401, '이메일 또는 비밀번호가 올바르지 않습니다.');
         }
-        $token = jwt_sign(['userId' => (int) $user['id'], 'email' => $user['email']]);
-        send_json(200, ['success' => true, 'token' => $token, 'user' => ['id' => (int) $user['id'], 'email' => $user['email']]]);
+        $role = normalize_role($user['role'] ?? '');
+        $token = jwt_sign(['userId' => (int) $user['id'], 'email' => $user['email'], 'role' => $role]);
+        send_json(200, ['success' => true, 'token' => $token, 'user' => ['id' => (int) $user['id'], 'email' => $user['email'], 'role' => $role]]);
     }
 
     if ($method === 'GET' && $path === '/auth/me') {
-        send_json(200, ['success' => true, 'user' => require_auth()]);
+        // 권한은 DB 의 현재 값으로 알려 준다
+        $me = require_auth();
+        $stmt = db()->prepare('SELECT id, email, role FROM users WHERE id = ? LIMIT 1');
+        $stmt->execute([$me['id']]);
+        $row = $stmt->fetch();
+        if (!$row) fail(401, '로그인이 필요합니다.');
+        send_json(200, ['success' => true, 'user' => ['id' => (int) $row['id'], 'email' => $row['email'], 'role' => normalize_role($row['role'])]]);
+    }
+
+    // ---- 계정 관리 (제작자 전용) ----
+    if ($path === '/users' || preg_match('#^/users/(\d+)$#', $path, $match)) {
+        $me = require_developer();
+        require __DIR__ . '/users.php';
+        handle_users($method, isset($match[1]) ? (int) $match[1] : null, $me);
+    }
+
+    // ---- 방문자 기록, 대시보드 숫자 ----
+    if ($method === 'POST' && $path === '/public/visit') {
+        require __DIR__ . '/stats.php';
+        stats_visit();
+    }
+    if ($method === 'GET' && $path === '/stats') {
+        require_auth();
+        require __DIR__ . '/stats.php';
+        stats_dashboard();
+    }
+
+    // ---- 사이트 설정 ----
+    if ($path === '/settings' || preg_match('#^/settings/history/([A-Za-z]+)$#', $path, $match)) {
+        $user = require_auth();
+        require __DIR__ . '/settings.php';
+        handle_settings($method, $match[1] ?? null, $user);
+    }
+
+    if ($method === 'GET' && in_array($path, ['/public/site', '/public/robots.txt', '/public/sitemap.xml'], true)) {
+        require __DIR__ . '/settings.php';
+        if ($path === '/public/robots.txt') send_text('text/plain', robots_txt());
+        if ($path === '/public/sitemap.xml') send_text('application/xml', sitemap_xml());
+        send_json(200, ['success' => true, 'settings' => settings_public()]);
     }
 
     // ---- 공개 홈: 가장 최근 수정된 페이지 하나 ----
@@ -61,10 +102,10 @@ try {
     }
 
     // ---- 파일관리자 ----
-    if ($path === '/files' || preg_match('#^/files/(main|sub)/([A-Za-z0-9._-]+)$#', $path, $match)) {
+    if ($path === '/files' || preg_match('#^/files/([A-Za-z0-9._~-]+(?:/[A-Za-z0-9._~-]+){0,2})$#', $path, $match)) {
         require_auth();
         require __DIR__ . '/files.php';
-        handle_files($method, $match[1] ?? null, $match[2] ?? null);
+        handle_files($method, isset($match[1]) ? explode('/', $match[1]) : []);
     }
 
     // ---- 페이지 (관리자 공용) ----
@@ -87,12 +128,17 @@ try {
             $config = $body->config ?? null;
             if ($error = validate_config($config)) fail(400, $error);
             $name = trim((string) ($body->name ?? $config->name ?? '')) ?: 'Untitled';
+            $slug = strtolower(trim((string) ($body->slug ?? '')));
+            if ($slug !== '') {
+                if ($error = validate_slug($slug)) fail(400, $error);
+                if (get_page_by_slug($slug)) fail(409, '이미 다른 페이지가 쓰는 주소입니다.');
+            }
             // 첫 페이지는 자동으로 메인 페이지가 된다.
             $hasHome = (int) db()->query('SELECT COUNT(*) FROM pages WHERE is_home = 1')->fetchColumn() > 0;
             $stmt = db()->prepare('INSERT INTO pages (user_id, name, is_home, config) VALUES (?, ?, ?, ?)');
             $stmt->execute([$user['id'], $name, $hasHome ? 0 : 1, encode_config($config)]);
             $newId = (int) db()->lastInsertId();
-            db()->prepare('UPDATE pages SET slug = ? WHERE id = ?')->execute(["page-$newId", $newId]);
+            db()->prepare('UPDATE pages SET slug = ? WHERE id = ?')->execute([$slug !== '' ? $slug : "page-$newId", $newId]);
             send_json(201, ['success' => true, 'message' => '페이지를 저장했습니다.', 'page' => get_page($newId)]);
         }
 
@@ -134,6 +180,14 @@ try {
     }
 
     // ---- AI ----
+    if ($method === 'POST' && preg_match('#^/ai/usage/(\d+)/snapshot$#', $path, $match)) {
+        ai_save_snapshot(require_auth(), (int) $match[1], request_body());
+    }
+
+    if ($method === 'POST' && preg_match('#^/ai/usage/(\d+)/restore$#', $path, $match)) {
+        ai_restore(require_auth(), (int) $match[1]);
+    }
+
     if ($method === 'GET' && $path === '/ai/usage') {
         ai_usage(require_auth());
     }

@@ -5,9 +5,20 @@ import { useProjectsStore, type Project } from '@/store/projectsStore'
 const API_BASE = import.meta.env.VITE_API_BASE ?? (import.meta.env.DEV ? 'http://localhost:3001' : '')
 const TOKEN_KEY = 'webbuilder-token'
 
+/** developer = 제작자(코드 편집, 계정 관리), admin = 고객 관리자(노코드 편집만) */
+export type UserRole = 'developer' | 'admin'
+
 export interface AuthUser {
   id: number
   email: string
+  role?: UserRole
+}
+
+export interface AccountUser {
+  id: number
+  email: string
+  role: UserRole
+  createdAt: string
 }
 
 export interface SavedPage {
@@ -59,6 +70,72 @@ export function fetchMe() {
   return request<{ success: boolean; user: AuthUser }>('/api/auth/me')
 }
 
+// ---- 사이트 설정 ----
+/** 서버 site_settings 의 키. 의미는 backend/src/services/siteSettingsService.js 참고 */
+export type SiteSettings = Record<string, string>
+export interface SettingsHistoryEntry { id: number; value: string; createdAt: string; email: string }
+
+export function fetchPublicSiteSettings() {
+  return request<{ success: boolean; settings: SiteSettings }>('/api/public/site')
+}
+
+export function fetchSiteSettings() {
+  return request<{ success: boolean; settings: SiteSettings; codeKeys: string[] }>('/api/settings')
+}
+
+export function saveSiteSettings(settings: SiteSettings) {
+  return request<{ success: boolean; settings: SiteSettings }>('/api/settings', { method: 'PUT', body: JSON.stringify({ settings }) })
+}
+
+export function fetchSettingsHistory(key: string) {
+  return request<{ success: boolean; history: SettingsHistoryEntry[] }>(`/api/settings/history/${key}`)
+}
+
+export function apiUrl(path: string) {
+  return `${API_BASE}${path}`
+}
+
+// ---- 대시보드 숫자, 방문자 기록 ----
+export interface DashboardStats {
+  visitors: { today: number; last30: number; dailyAverage: number; total: number; days: { day: string; count: number }[] }
+  pages: number
+  recentPages: { id: number; name: string; slug: string | null; isHome: boolean; updatedAt: string }[]
+  storage: { used: number; quota: number }
+}
+
+export function fetchStats() {
+  return request<{ success: boolean } & DashboardStats>('/api/stats')
+}
+
+/** 방문자 화면에서 하루 한 번 센다 (관리자는 세지 않음). 실패해도 화면에는 영향 없다. */
+export function recordVisit(path: string) {
+  const key = `webbuilder-visit-${new Date().toISOString().slice(0, 10)}`
+  try {
+    if (sessionStorage.getItem(key)) return
+    sessionStorage.setItem(key, '1')
+  } catch {
+    // 저장소를 못 쓰면 매번 보내도 서버가 하루 한 번만 센다
+  }
+  fetch(`${API_BASE}/api/public/visit`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) }).catch(() => {})
+}
+
+// ---- 계정 관리 (제작자 전용) ----
+export function listAccounts() {
+  return request<{ success: boolean; users: AccountUser[] }>('/api/users')
+}
+
+export function createAccount(email: string, password: string, role: UserRole) {
+  return request<{ success: boolean; user: AccountUser }>('/api/users', { method: 'POST', body: JSON.stringify({ email, password, role }) })
+}
+
+export function updateAccount(id: number, changes: { role?: UserRole; password?: string }) {
+  return request<{ success: boolean; user: AccountUser }>(`/api/users/${id}`, { method: 'PUT', body: JSON.stringify(changes) })
+}
+
+export function deleteAccount(id: number) {
+  return request<{ success: boolean }>(`/api/users/${id}`, { method: 'DELETE' })
+}
+
 export function fetchPublicHome() {
   return request<{ success: boolean; page: SavedPage | null }>('/api/public/home')
 }
@@ -96,7 +173,11 @@ export function updatePageMeta(serverId: number, meta: { slug?: string; isHome?:
 
 // ---- 파일관리자 ----
 
-export type FileFolder = 'main' | 'sub'
+/** 시스템 폴더(main, sub, logo, slide) 또는 직접 만든 폴더 이름 */
+export type FileFolder = string
+
+export interface FileFolderInfo { name: string; system: boolean; count: number; size: number }
+export interface TrashFile { id: string; folder: string; name: string; size: number; deletedAt: string }
 
 export interface UploadedFile {
   name: string
@@ -122,8 +203,38 @@ export async function uploadFile(file: File, folder: FileFolder = 'main') {
   return (data as { file: UploadedFile }).file
 }
 
+/** 지우면 휴지통으로 간다 (30일 동안 되살리기 가능) */
 export function deleteFile(folder: FileFolder, name: string) {
   return request<{ success: boolean }>(`/api/files/${folder}/${encodeURIComponent(name)}`, { method: 'DELETE' })
+}
+
+/** 이름 바꾸기(name) 또는 다른 폴더로 옮기기(folder) */
+export function updateFile(folder: FileFolder, name: string, changes: { name?: string; folder?: string }) {
+  return request<{ success: boolean; file: UploadedFile }>(`/api/files/${folder}/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(changes) })
+}
+
+export function listFolders() {
+  return request<{ success: boolean; folders: FileFolderInfo[]; usage: { used: number; quota: number } }>('/api/files/folders')
+}
+
+export function createFolder(name: string) {
+  return request<{ success: boolean; folder: string }>('/api/files/folders', { method: 'POST', body: JSON.stringify({ name }) })
+}
+
+export function deleteFolder(name: string) {
+  return request<{ success: boolean }>(`/api/files/folders/${encodeURIComponent(name)}`, { method: 'DELETE' })
+}
+
+export function listTrash() {
+  return request<{ success: boolean; files: TrashFile[] }>('/api/files/trash')
+}
+
+export function restoreTrash(id: string) {
+  return request<{ success: boolean; file: UploadedFile }>(`/api/files/trash/${encodeURIComponent(id)}/restore`, { method: 'POST' })
+}
+
+export function purgeTrash(id: string) {
+  return request<{ success: boolean }>(`/api/files/trash/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
 export function fetchSavedPage(id: number) {
@@ -134,15 +245,20 @@ export function listSavedPages() {
   return request<{ success: boolean; pages: SavedPage[] }>('/api/pages')
 }
 
-export async function ensureServerPage(localId: string, name: string, config: SiteConfig) {
+export async function ensureServerPage(localId: string, name: string, config: SiteConfig, slug?: string) {
   const project = useProjectsStore.getState().projects.find((item) => item.id === localId)
   if (project?.serverId) return project.serverId
 
   const data = await request<{ page: SavedPage }>('/api/pages', {
     method: 'POST',
-    body: JSON.stringify({ name, config }),
+    body: JSON.stringify({ name, config, slug }),
   })
   useProjectsStore.getState().attachServerId(localId, data.page.id)
+  useProjectsStore.setState((state) => ({
+    projects: state.projects.map((item) => (
+      item.id === localId ? { ...item, slug: data.page.slug ?? undefined, isHome: data.page.isHome } : item
+    )),
+  }))
   return data.page.id
 }
 
@@ -165,6 +281,7 @@ export interface AiUsageEntry {
   provider: string
   status: string
   createdAt: string
+  restorable?: boolean
 }
 
 export function fetchAiUsage() {
@@ -173,9 +290,23 @@ export function fetchAiUsage() {
 
 export interface EditProposal {
   success: boolean
+  usageId?: number
   reply: string
   summary: string
   operations: unknown[]
+}
+
+export function saveAiRestorePoint(usageId: number, config: SiteConfig) {
+  return request<{ success: boolean }>(`/api/ai/usage/${usageId}/snapshot`, {
+    method: 'POST',
+    body: JSON.stringify({ config }),
+  })
+}
+
+export function restoreAiEdit(usageId: number) {
+  return request<{ success: boolean; page: SavedPage }>(`/api/ai/usage/${usageId}/restore`, {
+    method: 'POST',
+  })
 }
 
 export function proposeSiteEdits(

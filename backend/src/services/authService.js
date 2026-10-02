@@ -20,35 +20,65 @@ function validateCredentials(email, password) {
   return null;
 }
 
+const ROLES = ["developer", "admin"];
+
+function normalizeRole(role) {
+  return ROLES.includes(role) ? role : "admin";
+}
+
 function signToken(user) {
   return jwt.sign(
-    { userId: user.id, email: user.email },
+    { userId: user.id, email: user.email, role: normalizeRole(user.role) },
     process.env.JWT_SECRET,
     { expiresIn: "7d" }
   );
 }
 
-// 관리자 계정이 하나도 없을 때만 .env 의 ADMIN_EMAIL / ADMIN_PASSWORD 로 첫 관리자를 만든다.
+async function createAccount(email, password, role) {
+  const passwordHash = await bcrypt.hash(password, 10);
+  const [result] = await pool.query(
+    "INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)",
+    [email, passwordHash, normalizeRole(role)]
+  );
+  return result.insertId;
+}
+
+/**
+ * 처음 계정 만들기 (.env):
+ * - DEVELOPER_EMAIL / DEVELOPER_PASSWORD: 제작자 계정이 하나도 없으면 만든다.
+ * - ADMIN_EMAIL / ADMIN_PASSWORD: 계정이 하나도 없으면 고객 관리자 계정으로 만든다.
+ */
 async function ensureAdmin() {
+  let created = false;
+  const devEmail = normalizeEmail(process.env.DEVELOPER_EMAIL);
+  const devPassword = process.env.DEVELOPER_PASSWORD;
+  if (devEmail && !validateCredentials(devEmail, devPassword)) {
+    const [[{ count }]] = await pool.query("SELECT COUNT(*) AS count FROM users WHERE role = 'developer' OR email = ?", [devEmail]);
+    if (count === 0) {
+      await createAccount(devEmail, devPassword, "developer");
+      console.log("Admin: 제작자 계정을 만들었습니다.");
+      created = true;
+    }
+  }
+
   const [rows] = await pool.query("SELECT COUNT(*) AS count FROM users");
-  if (rows[0].count > 0) return false;
+  if (rows[0].count > 0) return created;
 
   const email = normalizeEmail(process.env.ADMIN_EMAIL);
   const password = process.env.ADMIN_PASSWORD;
   if (validateCredentials(email, password)) {
-    console.warn("Admin: 관리자 계정이 없습니다. .env 에 ADMIN_EMAIL 과 8자 이상의 ADMIN_PASSWORD 를 넣고 서버를 다시 시작하세요.");
+    console.warn("Admin: 계정이 없습니다. .env 에 ADMIN_EMAIL 과 8자 이상의 ADMIN_PASSWORD 를 넣고 서버를 다시 시작하세요.");
     return false;
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
-  await pool.query("INSERT INTO users (email, password_hash) VALUES (?, ?)", [email, passwordHash]);
+  await createAccount(email, password, "admin");
   console.log("Admin: 첫 관리자 계정을 만들었습니다.");
   return true;
 }
 
 async function login(email, password) {
   const [rows] = await pool.query(
-    "SELECT id, email, password_hash FROM users WHERE email = ? LIMIT 1",
+    "SELECT id, email, password_hash, role FROM users WHERE email = ? LIMIT 1",
     [email]
   );
   const user = rows[0];
@@ -64,11 +94,14 @@ async function login(email, password) {
 
   return {
     token: signToken(user),
-    user: { id: user.id, email: user.email },
+    user: { id: user.id, email: user.email, role: normalizeRole(user.role) },
   };
 }
 
 module.exports = {
+  ROLES,
+  normalizeRole,
+  createAccount,
   normalizeEmail,
   validateCredentials,
   ensureAdmin,

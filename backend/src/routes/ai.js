@@ -6,6 +6,40 @@ const router = express.Router();
 
 router.use(requireAuth);
 
+router.post("/usage/:id/snapshot", async (req, res) => {
+  try {
+    const saved = await aiService.saveRestorePoint(req.user.id, req.params.id, req.body.config);
+    if (!saved) {
+      return res.status(404).json({ success: false, message: "수정 기록을 찾을 수 없습니다." });
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    const status = error.status || 500;
+    console.error("Save AI restore point failed", error.message);
+    return res.status(status).json({
+      success: false,
+      message: error.status ? error.message : "되돌리기 정보를 저장하지 못했습니다.",
+    });
+  }
+});
+
+router.post("/usage/:id/restore", async (req, res) => {
+  try {
+    const page = await aiService.restoreLatest(req.user.id, req.params.id);
+    if (!page) {
+      return res.status(404).json({ success: false, message: "되돌릴 수정 기록을 찾을 수 없습니다." });
+    }
+    return res.json({ success: true, message: "AI 수정 전으로 되돌렸습니다.", page });
+  } catch (error) {
+    const status = error.status || 500;
+    console.error("Restore AI edit failed", error.message);
+    return res.status(status).json({
+      success: false,
+      message: error.status ? error.message : "AI 수정을 되돌리지 못했습니다.",
+    });
+  }
+});
+
 router.get("/usage", async (req, res) => {
   try {
     const usage = await aiService.listUsage(req.user.id);

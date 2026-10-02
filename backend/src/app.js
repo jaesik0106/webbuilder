@@ -12,17 +12,24 @@ const pageRoutes = require("./routes/pages");
 const aiRoutes = require("./routes/ai");
 const publicRoutes = require("./routes/public");
 const files = require("./routes/files");
+const userRoutes = require("./routes/users");
+const settingsRoutes = require("./routes/settings");
+const stats = require("./routes/stats");
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 app.use("/api/auth", authRoutes);
 app.use("/api/pages", pageRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/public", publicRoutes);
 app.use("/api/files", files.router);
+app.use("/api/users", userRoutes);
+app.use("/api/settings", settingsRoutes);
+app.use("/api/stats", stats.router);
+app.use("/api/public", stats.publicRouter);
 app.use("/uploads", express.static(files.UPLOAD_DIR, { maxAge: "7d" }));
 
 app.get("/api/health", (req, res) => {

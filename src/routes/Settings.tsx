@@ -1,17 +1,20 @@
 import { useState, useEffect, useRef } from 'react'
 import {
-  Settings2, Search as SearchIcon, Key, Check,
+  Settings2, Search as SearchIcon, Key, Check, Code2, Paintbrush,
 } from 'lucide-react'
+import { SiteSettingsPanel } from './SiteSettingsPanels'
 import { toast } from 'sonner'
 import { useProjectsStore, type ProjectSettings } from '@/store/projectsStore'
 import { useEditorStore } from '@/store/editorStore'
 
-type SettingsTab = 'general' | 'seo' | 'api'
+type SettingsTab = 'basic' | 'search' | 'scripts' | 'css' | 'api'
 
 const tabDefs: { value: SettingsTab; label: string; icon: typeof Settings2 }[] = [
-  { value: 'general', label: 'General', icon: Settings2 },
-  { value: 'seo', label: 'SEO', icon: SearchIcon },
-  { value: 'api', label: 'API Keys', icon: Key },
+  { value: 'basic', label: '기본 정보', icon: Settings2 },
+  { value: 'search', label: '검색 설정', icon: SearchIcon },
+  { value: 'scripts', label: '스크립트 추가', icon: Code2 },
+  { value: 'css', label: '추가 CSS', icon: Paintbrush },
+  { value: 'api', label: 'API 키', icon: Key },
 ]
 
 function useSettingsState() {
@@ -48,7 +51,7 @@ function useSettingsState() {
 function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mb-5">
-      <label className="block text-[11.5px] text-text-2 mb-1.5 font-medium">{label}</label>
+      <label className="block text-[13.5px] text-text-2 mb-1.5 font-medium">{label}</label>
       {children}
     </div>
   )
@@ -61,64 +64,8 @@ function ControlledInput({ settingsKey, placeholder, settings }: { settingsKey: 
       value={settings.data[settingsKey] || ''}
       placeholder={placeholder}
       onChange={(e) => settings.update(settingsKey, e.target.value)}
-      className="w-full px-3 py-2 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[13px] outline-none focus:border-green placeholder:text-text-3 transition-colors"
+      className="w-full px-3 py-2 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[15px] outline-none focus:border-green placeholder:text-text-3 transition-colors"
     />
-  )
-}
-
-function ControlledTextarea({ settingsKey, rows = 3, settings }: { settingsKey: string; rows?: number; settings: ReturnType<typeof useSettingsState> }) {
-  return (
-    <textarea
-      value={settings.data[settingsKey] || ''}
-      rows={rows}
-      onChange={(e) => settings.update(settingsKey, e.target.value)}
-      className="w-full px-3 py-2 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[13px] outline-none focus:border-green resize-y transition-colors"
-    />
-  )
-}
-
-function GeneralPanel({ settings }: { settings: ReturnType<typeof useSettingsState> }) {
-  return (
-    <div>
-      <h2 className="text-lg font-semibold mb-4">General</h2>
-      <FieldGroup label="Site Name"><ControlledInput settingsKey="siteName" settings={settings} /></FieldGroup>
-      <FieldGroup label="Site Description"><ControlledTextarea settingsKey="siteDescription" settings={settings} /></FieldGroup>
-      <FieldGroup label="Favicon URL"><ControlledInput settingsKey="faviconUrl" placeholder="https://example.com/favicon.ico" settings={settings} /></FieldGroup>
-      <FieldGroup label="Language">
-        <select
-          value={settings.data.language || 'English'}
-          onChange={(e) => settings.update('language', e.target.value)}
-          className="w-full px-3 py-2 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[13px] outline-none focus:border-green cursor-pointer"
-        >
-          <option>English</option><option>German</option><option>Spanish</option><option>French</option>
-        </select>
-      </FieldGroup>
-    </div>
-  )
-}
-
-function SeoPanel({ settings }: { settings: ReturnType<typeof useSettingsState> }) {
-  const title = settings.data.seoTitle || 'My Website - Build with OpenPage'
-  const description = settings.data.seoDescription || 'A beautiful website built with structured JSON config.'
-  const domain = settings.data.customDomain || 'mywebsite.com'
-
-  return (
-    <div>
-      <h2 className="text-lg font-semibold mb-4">SEO</h2>
-      <FieldGroup label="Page Title"><ControlledInput settingsKey="seoTitle" settings={settings} /></FieldGroup>
-      <FieldGroup label="Meta Description"><ControlledTextarea settingsKey="seoDescription" settings={settings} /></FieldGroup>
-      <FieldGroup label="OG Image URL"><ControlledInput settingsKey="ogImageUrl" placeholder="https://example.com/og.png" settings={settings} /></FieldGroup>
-
-      {/* Live Google preview */}
-      <div className="mt-6 p-4 rounded-xl bg-bg-2 border border-border-default">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-text-3 mb-3">Google Preview</div>
-        <div className="text-[#8ab4f8] text-sm hover:underline cursor-pointer">{title}</div>
-        <div className="text-[#bdc1c6] text-[11px] mt-0.5">https://{domain}</div>
-        <div className="text-[#9aa0a6] text-[11.5px] mt-1 leading-relaxed">
-          {description}
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -165,7 +112,7 @@ function ApiPanel({ settings }: { settings: ReturnType<typeof useSettingsState> 
           placeholder="Must match OPENPAGE_DEPLOY_KEY on server"
           settings={settings}
         />
-        <p className="text-[11px] text-text-3 mt-1.5">
+        <p className="text-[13px] text-text-3 mt-1.5">
           Required for one-click publishing. Stored in your project settings.
         </p>
       </FieldGroup>
@@ -177,23 +124,23 @@ function ApiPanel({ settings }: { settings: ReturnType<typeof useSettingsState> 
             value={geminiKey}
             placeholder="AIza..."
             onChange={(e) => handleKeyChange(e.target.value)}
-            className="flex-1 px-3 py-2 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[13px] outline-none focus:border-green placeholder:text-text-3 transition-colors font-mono"
+            className="flex-1 px-3 py-2 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[15px] outline-none focus:border-green placeholder:text-text-3 transition-colors font-mono"
           />
           <button
             onClick={() => setShowKey(!showKey)}
-            className="px-3 py-2 rounded-lg border border-border-default bg-bg-2 text-text-2 text-[12px] hover:text-text-0 hover:bg-bg-3 transition-colors shrink-0"
+            className="px-3 py-2 rounded-lg border border-border-default bg-bg-2 text-text-2 text-[14px] hover:text-text-0 hover:bg-bg-3 transition-colors shrink-0"
           >
             {showKey ? 'Hide' : 'Show'}
           </button>
           <button
             onClick={handleTest}
             disabled={!geminiKey || testing}
-            className="px-3 py-2 rounded-lg bg-green/10 text-green text-[12px] font-medium hover:bg-green/20 transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-2 rounded-lg bg-green/10 text-green text-[14px] font-medium hover:bg-green/20 transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {testing ? 'Testing...' : 'Test'}
           </button>
         </div>
-        <p className="text-[11px] text-text-3 mt-1.5">
+        <p className="text-[13px] text-text-3 mt-1.5">
           Used for client-side AI generation. Get one at{' '}
           <span className="text-text-2">aistudio.google.com</span>
         </p>
@@ -204,12 +151,15 @@ function ApiPanel({ settings }: { settings: ReturnType<typeof useSettingsState> 
 }
 
 export function Settings() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general')
+  const [activeTab, setActiveTab] = useState<SettingsTab>('basic')
   const settings = useSettingsState()
 
   const panels: Record<SettingsTab, React.ReactNode> = {
-    general: <GeneralPanel settings={settings} />,
-    seo: <SeoPanel settings={settings} />,
+    // 서버에 저장하는 사이트 설정 (방문자 화면에 적용)
+    basic: <SiteSettingsPanel panel="basic" />,
+    search: <SiteSettingsPanel panel="search" />,
+    scripts: <SiteSettingsPanel panel="scripts" />,
+    css: <SiteSettingsPanel panel="css" />,
     api: <ApiPanel settings={settings} />,
   }
 
@@ -222,7 +172,7 @@ export function Settings() {
             key={value}
             onClick={() => setActiveTab(value)}
             style={{ animationDelay: `${i * 40}ms` }}
-            className={`shrink-0 md:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[12.5px] transition-all text-left animate-fade-in-up ${
+            className={`shrink-0 md:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[14.5px] transition-all text-left animate-fade-in-up ${
               activeTab === value
                 ? 'bg-bg-3 text-text-0'
                 : 'text-text-2 hover:text-text-0 hover:bg-bg-2'
@@ -237,7 +187,7 @@ export function Settings() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8 max-w-2xl relative">
         {settings.showSaved && (
-          <div className="absolute top-3 right-6 flex items-center gap-1.5 text-green text-[11px] animate-fade-in">
+          <div className="absolute top-3 right-6 flex items-center gap-1.5 text-green text-[13px] animate-fade-in">
             <Check size={12} />
             Saved
           </div>

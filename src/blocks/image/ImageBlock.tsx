@@ -21,7 +21,7 @@ export function ImageBlock({ block }: { block: BlockConfig }) {
 
   if (variant === 'side-by-side') {
     const imgEl = src
-      ? <img src={src} alt={alt} className="w-full h-full object-cover rounded-lg" />
+      ? <img src={src} alt={alt} className="w-full h-auto rounded-lg" />
       : <Placeholder className="w-full h-64 @lg:h-80 rounded-lg" imageProp="src" />
 
     return (
@@ -47,11 +47,11 @@ export function ImageBlock({ block }: { block: BlockConfig }) {
     return (
       <div className="px-6 py-12 @lg:px-16 @lg:py-16">
         {title && <h2 className="reveal-fade-up reveal-d1 text-2xl font-display font-semibold mb-6 text-center">{title}</h2>}
-        <div className="grid grid-cols-2 @lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 @lg:grid-cols-4 gap-3 items-start">
           {gridImages.map((img, i) => (
-            <div key={i} className={`reveal-scale reveal-d${Math.min(i + 2, 8)} aspect-square rounded-lg overflow-hidden`}>
+            <div key={i} className={`reveal-scale reveal-d${Math.min(i + 2, 8)} rounded-lg overflow-hidden ${img.src ? '' : 'aspect-square'}`}>
               {img.src
-                ? <img src={img.src} alt={img.alt || ''} className="w-full h-full object-cover" />
+                ? <img src={img.src} alt={img.alt || ''} className="w-full h-auto block" />
                 : <Placeholder className="w-full h-full" imageProp={`images.${i}.src`} />
               }
             </div>
@@ -65,7 +65,7 @@ export function ImageBlock({ block }: { block: BlockConfig }) {
   return (
     <div className="reveal-scale reveal-d1 relative">
       {src
-        ? <img src={src} alt={alt} className="w-full h-64 @lg:h-96 object-cover" />
+        ? <img src={src} alt={alt} className="w-full h-auto block" />
         : <Placeholder className="w-full h-64 @lg:h-96" imageProp="src" />
       }
       {(title || subtitle) && (

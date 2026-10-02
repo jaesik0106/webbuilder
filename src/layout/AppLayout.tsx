@@ -4,10 +4,15 @@ import { toast, Toaster } from 'sonner'
 import { AdminSidebar, AdminTopBar } from './AdminSidebar'
 import { getToken, listSavedPages, toProject } from '@/lib/builderApi'
 import { useProjectsStore } from '@/store/projectsStore'
+import { useAuthStore } from '@/store/authStore'
 
 export function AppLayout() {
   const location = useLocation()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    useAuthStore.getState().load()
+  }, [])
 
   useEffect(() => {
     let cancelled = false

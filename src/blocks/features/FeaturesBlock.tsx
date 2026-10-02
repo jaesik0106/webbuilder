@@ -133,7 +133,7 @@ function FeaturesAlternating({ props }: { props: FeaturesProps }) {
               {/* Image / placeholder */}
               <div className="flex-1 w-full">
                 {imageUrl ? (
-                  <img src={imageUrl} alt={item.title} className="w-full h-48 @lg:h-56 object-cover rounded-xl" />
+                  <img src={imageUrl} alt={item.title} className="w-full h-auto rounded-xl" />
                 ) : (
                   <div className="w-full h-48 @lg:h-56 rounded-xl bg-bg-2 border border-border-default flex items-center justify-center">
                     <Icon size={32} className="text-green/30" />

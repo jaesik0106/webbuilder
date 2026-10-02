@@ -25,7 +25,7 @@ function ColorInput({ value, onInput, onChange }: { value: string; onInput: (v: 
           const v = e.target.value
           if (/^#[0-9a-fA-F]{6}$/.test(v)) onChange(v)
         }}
-        className="w-[72px] px-1.5 py-1 rounded border border-border-default bg-bg-2 text-text-1 text-[10px] font-mono outline-none focus:border-green"
+        className="w-[84px] px-1.5 py-1 rounded border border-border-default bg-bg-2 text-text-0 text-[14px] font-mono outline-none focus:border-green"
       />
     </div>
   )
@@ -49,7 +49,7 @@ function ColorSection({ title, colors, defaultOpen = false }: {
         className="w-full flex items-center justify-between px-3 py-2 bg-bg-2 hover:bg-bg-3 transition-colors text-left"
       >
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold">{title}</span>
+          <span className="text-[15px] font-semibold text-text-0">{title}</span>
           <div className="flex gap-0.5">
             {colors.slice(0, 4).map((c) => (
               <div
@@ -66,7 +66,7 @@ function ColorSection({ title, colors, defaultOpen = false }: {
         <div className="px-3 py-2.5 space-y-2.5 bg-bg-1">
           {colors.map((c) => (
             <div key={c.key} className="flex items-center justify-between">
-              <span className="text-[10.5px] text-text-2">{c.label}</span>
+              <span className="text-[14.5px] text-text-1">{c.label}</span>
               <ColorInput
                 value={resolved[c.key] as string}
                 onInput={(v) => previewTheme({ [c.key]: v })}
@@ -100,7 +100,7 @@ export function DesignPanel() {
     <div className="px-3.5 py-3.5">
       {/* Preset grid */}
       <div className="mb-4">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-text-3 mb-2">Presets</div>
+        <div className="text-[14px] font-semibold uppercase tracking-wider text-text-1 mb-2">Presets</div>
         <div className="grid grid-cols-2 gap-1.5">
           {themePresets.map((preset) => (
             <button
@@ -118,7 +118,7 @@ export function DesignPanel() {
                 <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: preset.theme.accent }} />
                 <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: preset.theme.text0 }} />
               </div>
-              <div className="text-[10px] font-medium truncate">{preset.name}</div>
+              <div className="text-[14.5px] font-medium text-text-0 truncate">{preset.name}</div>
             </button>
           ))}
         </div>
@@ -167,7 +167,7 @@ export function DesignPanel() {
 
       {/* Fonts */}
       <div className="mb-4">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-text-3 mb-2">Fonts</div>
+        <div className="text-[14px] font-semibold uppercase tracking-wider text-text-1 mb-2">Fonts</div>
         <div className="space-y-2.5">
           {([
             { key: 'fontSans' as const, label: 'Body' },
@@ -175,11 +175,11 @@ export function DesignPanel() {
             { key: 'fontMono' as const, label: 'Mono' },
           ]).map(({ key, label }) => (
             <div key={key}>
-              <label className="block text-[10.5px] text-text-2 mb-1">{label}</label>
+              <label className="block text-[14.5px] text-text-1 mb-1">{label}</label>
               <select
                 value={resolved[key]}
                 onChange={(e) => updateTheme({ [key]: e.target.value })}
-                className="w-full px-2 py-1.5 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[11px] outline-none focus:border-green cursor-pointer"
+                className="w-full px-2 py-1.5 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[15px] outline-none focus:border-green cursor-pointer"
                 style={{ fontFamily: `"${resolved[key]}", sans-serif` }}
               >
                 {googleFontOptions.map((f) => (
@@ -193,28 +193,28 @@ export function DesignPanel() {
 
       {/* Radius */}
       <div>
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-text-3 mb-2">Radius</div>
+        <div className="text-[14px] font-semibold uppercase tracking-wider text-text-1 mb-2">Radius</div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="block text-[10.5px] text-text-2 mb-1">Default</label>
+            <label className="block text-[14.5px] text-text-1 mb-1">Default</label>
             <input
               type="number"
               min={0}
               max={24}
               value={resolved.radius}
               onChange={(e) => updateTheme({ radius: Number(e.target.value) })}
-              className="w-full px-2 py-1.5 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[11px] outline-none focus:border-green"
+              className="w-full px-2 py-1.5 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[15px] outline-none focus:border-green"
             />
           </div>
           <div>
-            <label className="block text-[10.5px] text-text-2 mb-1">Large</label>
+            <label className="block text-[14.5px] text-text-1 mb-1">Large</label>
             <input
               type="number"
               min={0}
               max={32}
               value={resolved.radiusLg}
               onChange={(e) => updateTheme({ radiusLg: Number(e.target.value) })}
-              className="w-full px-2 py-1.5 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[11px] outline-none focus:border-green"
+              className="w-full px-2 py-1.5 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[15px] outline-none focus:border-green"
             />
           </div>
         </div>

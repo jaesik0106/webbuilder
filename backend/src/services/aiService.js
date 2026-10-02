@@ -57,26 +57,84 @@ function parseJsonText(text) {
 }
 
 async function recordUsage(userId, pageId, prompt, provider, status) {
-  await pool.query(
+  const [result] = await pool.query(
     "INSERT INTO ai_usage (user_id, page_id, prompt, provider, status) VALUES (?, ?, ?, ?, ?)",
     [userId, pageId, String(prompt).slice(0, 2000), provider, status]
   );
+  return result.insertId;
+}
+
+async function latestRestorableId(userId) {
+  const [rows] = await pool.query(
+    "SELECT id FROM ai_usage WHERE user_id = ? AND before_config IS NOT NULL ORDER BY id DESC LIMIT 1",
+    [userId]
+  );
+  return rows[0] ? Number(rows[0].id) : null;
 }
 
 async function listUsage(userId) {
   const [rows] = await pool.query(
-    "SELECT id, page_id, prompt, provider, status, created_at FROM ai_usage WHERE user_id = ? ORDER BY id DESC LIMIT 50",
+    "SELECT id, page_id, prompt, provider, status, created_at, before_config IS NOT NULL AS has_snapshot FROM ai_usage WHERE user_id = ? ORDER BY id DESC LIMIT 50",
     [userId]
   );
+  const restorableId = await latestRestorableId(userId);
 
   return rows.map((row) => ({
-    id: row.id,
-    pageId: row.page_id,
+    id: Number(row.id),
+    pageId: row.page_id === null ? null : Number(row.page_id),
     prompt: row.prompt,
     provider: row.provider,
     status: row.status,
     createdAt: row.created_at,
+    restorable: Number(row.id) === restorableId && Boolean(row.has_snapshot),
   }));
+}
+
+async function saveRestorePoint(userId, usageId, config) {
+  const validationError = pageService.validateConfig(config);
+  if (validationError) {
+    throw badRequest(validationError);
+  }
+  const json = JSON.stringify(config);
+  if (Buffer.byteLength(json, "utf8") > MAX_PAGE_BYTES) {
+    throw badRequest("페이지 내용이 너무 큽니다.");
+  }
+
+  const [rows] = await pool.query(
+    "SELECT id, status, before_config FROM ai_usage WHERE id = ? AND user_id = ? LIMIT 1",
+    [usageId, userId]
+  );
+  const row = rows[0];
+  if (!row || row.status !== "success") {
+    return null;
+  }
+  if (row.before_config) {
+    return true;
+  }
+  await pool.query("UPDATE ai_usage SET before_config = ? WHERE id = ? AND user_id = ?", [json, usageId, userId]);
+  return true;
+}
+
+async function restoreLatest(userId, usageId) {
+  const restorableId = await latestRestorableId(userId);
+  if (restorableId !== Number(usageId)) {
+    const error = new Error("가장 최근 AI 수정만 취소할 수 있습니다.");
+    error.status = 409;
+    throw error;
+  }
+
+  const [rows] = await pool.query(
+    "SELECT page_id, before_config FROM ai_usage WHERE id = ? AND user_id = ? LIMIT 1",
+    [usageId, userId]
+  );
+  const row = rows[0];
+  if (!row?.before_config) {
+    return null;
+  }
+  const config = typeof row.before_config === "string" ? JSON.parse(row.before_config) : row.before_config;
+  const page = await pageService.updatePage(userId, row.page_id, { config });
+  await pool.query("DELETE FROM ai_usage WHERE id = ? AND user_id = ?", [usageId, userId]);
+  return page;
 }
 
 function isAbortError(error) {
@@ -221,8 +279,8 @@ async function proposeEdits(userId, pageId, { prompt, page, selectedBlockId, cat
       error.name = "AbortError";
       throw error;
     }
-    await recordUsage(userId, saved.id, prompt, provider, "success");
-    return proposal;
+    const usageId = await recordUsage(userId, saved.id, prompt, provider, "success");
+    return { ...proposal, usageId };
   } catch (error) {
     if (isAbortError(error) || signal?.aborted) {
       const abortError = new Error("Aborted");
@@ -237,4 +295,6 @@ async function proposeEdits(userId, pageId, { prompt, page, selectedBlockId, cat
 module.exports = {
   proposeEdits,
   listUsage,
+  saveRestorePoint,
+  restoreLatest,
 };

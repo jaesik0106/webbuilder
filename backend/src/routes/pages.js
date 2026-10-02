@@ -38,13 +38,14 @@ router.post("/", async (req, res) => {
   }
 
   try {
-    const page = await pageService.createPage(req.user.id, req.body.name, config);
+    const page = await pageService.createPage(req.user.id, req.body.name, config, req.body.slug);
     return res.status(201).json({
       success: true,
       message: "페이지를 저장했습니다.",
       page,
     });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ success: false, message: error.message });
     console.error("Create page failed", error.code || error.message);
     return res.status(500).json({ success: false, message: "페이지를 저장하지 못했습니다." });
   }

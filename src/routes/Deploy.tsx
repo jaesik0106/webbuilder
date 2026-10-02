@@ -112,8 +112,8 @@ export function Deploy() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="px-4 md:px-12 pt-8">
-        <h1 className="text-[22px] font-display font-semibold tracking-tight animate-fade-in-up stagger-1">Export</h1>
-        <p className="text-text-2 text-[13px] mt-1 animate-fade-in-up stagger-2">Download or publish your site</p>
+        <h1 className="text-[24px] font-display font-semibold tracking-tight animate-fade-in-up stagger-1">Export</h1>
+        <p className="text-text-2 text-[15px] mt-1 animate-fade-in-up stagger-2">Download or publish your site</p>
       </div>
 
       <div className="px-4 md:px-12 pt-6">
@@ -130,7 +130,7 @@ export function Deploy() {
               </div>
               <div className="flex-1">
                 <span className="text-sm font-semibold">{opt.label}</span>
-                <p className="text-[11.5px] text-text-2 mt-0.5">{opt.description}</p>
+                <p className="text-[13.5px] text-text-2 mt-0.5">{opt.description}</p>
               </div>
               <ExternalLink size={14} className="text-text-3 mt-1 shrink-0" />
             </div>
@@ -140,7 +140,7 @@ export function Deploy() {
 
       {hasDeployKey && (
         <div className="px-4 md:px-12 pt-8 animate-fade-in-up stagger-3">
-          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-3">Publish</h2>
+          <h2 className="text-[13px] font-semibold uppercase tracking-wider text-text-3 mb-3">Publish</h2>
           <div className="p-5 rounded-xl border bg-bg-1 border-border-default">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-lg bg-green/10 border border-green/20 flex items-center justify-center text-green shrink-0">
@@ -148,7 +148,7 @@ export function Deploy() {
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="text-sm font-semibold">Publish to Web</h3>
-                <p className="text-[11.5px] text-text-2 mt-0.5">
+                <p className="text-[13.5px] text-text-2 mt-0.5">
                   Deploy your site to a live URL in seconds
                 </p>
 
@@ -160,7 +160,7 @@ export function Deploy() {
                         href={deployUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[12px] text-green hover:underline truncate"
+                        className="text-[14px] text-green hover:underline truncate"
                       >
                         {deployUrl.replace('https://', '')}
                       </a>
@@ -188,7 +188,7 @@ export function Deploy() {
                   <button
                     onClick={handlePublish}
                     disabled={publishing}
-                    className="px-4 py-1.5 rounded-lg bg-green text-bg-0 text-[12.5px] font-semibold hover:bg-green/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                    className="px-4 py-1.5 rounded-lg bg-green text-bg-0 text-[14.5px] font-semibold hover:bg-green/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                   >
                     {publishing ? (
                       <>
@@ -205,7 +205,7 @@ export function Deploy() {
                     )}
                   </button>
                   {timeAgo && (
-                    <span className="text-[11px] text-text-3">Last published {timeAgo}</span>
+                    <span className="text-[13px] text-text-3">Last published {timeAgo}</span>
                   )}
                 </div>
               </div>

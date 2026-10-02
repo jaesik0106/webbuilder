@@ -50,15 +50,29 @@ function validateSlug(slug) {
   return null;
 }
 
-async function createPage(userId, name, config) {
+async function createPage(userId, name, config, slug) {
   const pageName = String(name || config.name || "Untitled").trim() || "Untitled";
+  let nextSlug = slug ? String(slug).trim().toLowerCase() : "";
+  if (nextSlug) {
+    const slugError = validateSlug(nextSlug);
+    if (slugError) {
+      const error = new Error(slugError);
+      error.status = 400;
+      throw error;
+    }
+    if (await getPageBySlug(nextSlug)) {
+      const error = new Error("이미 다른 페이지가 쓰는 주소입니다.");
+      error.status = 409;
+      throw error;
+    }
+  }
   // 첫 페이지는 자동으로 메인 페이지가 된다.
   const [[{ count }]] = await pool.query("SELECT COUNT(*) AS count FROM pages WHERE is_home = 1");
   const [result] = await pool.query(
     "INSERT INTO pages (user_id, name, is_home, config) VALUES (?, ?, ?, ?)",
     [userId, pageName, count === 0 ? 1 : 0, JSON.stringify(config)]
   );
-  await pool.query("UPDATE pages SET slug = ? WHERE id = ?", [`page-${result.insertId}`, result.insertId]);
+  await pool.query("UPDATE pages SET slug = ? WHERE id = ?", [nextSlug || `page-${result.insertId}`, result.insertId]);
 
   return getPage(userId, result.insertId);
 }

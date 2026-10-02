@@ -75,7 +75,7 @@ function settings_clean_menu($items, int $depth = 1): array
 function settings_clean_popups($list): array
 {
     if (!is_array($list)) return [];
-    $clamp = fn ($v, int $fallback, int $min, int $max) => is_int($v) || is_float($v) ? (int) min($max, max($min, round($v))) : $fallback;
+    $clamp = function ($v, int $fallback, int $min, int $max) { return is_int($v) || is_float($v) ? (int) min($max, max($min, round($v))) : $fallback; };
     $out = [];
     foreach (array_slice($list, 0, 20) as $item) {
         if (!is_array($item)) continue;
@@ -152,9 +152,9 @@ function settings_history(string $key): array
     ensure_settings_tables();
     $stmt = db()->prepare('SELECT h.id, h.v, h.created_at, u.email FROM site_settings_history h LEFT JOIN users u ON u.id = h.user_id WHERE h.k = ? ORDER BY h.id DESC LIMIT 10');
     $stmt->execute([$key]);
-    return array_map(fn ($row) => [
+    return array_map(function ($row) { return [
         'id' => (int) $row['id'], 'value' => (string) $row['v'], 'createdAt' => iso_date($row['created_at']), 'email' => (string) ($row['email'] ?? ''),
-    ], $stmt->fetchAll());
+    ]; }, $stmt->fetchAll());
 }
 
 function send_text(string $type, string $body): void

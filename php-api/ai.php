@@ -17,7 +17,7 @@ function ai_instruction($catalog): string
         $defaults = json_encode($b->defaultProps ?? new stdClass(), JSON_UNESCAPED_UNICODE);
         $lines[] = "- {$b->type} (variants: $variants): " . ($b->description ?? '') . ". Default props: $defaults";
     }
-    $presetText = implode(', ', array_map(fn ($p) => "{$p->id} ({$p->name})", $presets));
+    $presetText = implode(', ', array_map(function ($p) { return "{$p->id} ({$p->name})"; }, $presets));
     $blockText = implode("\n", $lines);
 
     return <<<TXT
@@ -199,7 +199,7 @@ function ai_usage(array $user): void
     $restorableId = ai_latest_restorable_id($user['id']);
     $stmt = db()->prepare('SELECT id, page_id, prompt, provider, status, created_at, before_config IS NOT NULL AS has_snapshot FROM ai_usage WHERE user_id = ? ORDER BY id DESC LIMIT 50');
     $stmt->execute([$user['id']]);
-    $usage = array_map(fn ($row) => [
+    $usage = array_map(function ($row) use ($restorableId) { return [
         'id' => (int) $row['id'],
         'pageId' => $row['page_id'] === null ? null : (int) $row['page_id'],
         'prompt' => $row['prompt'],
@@ -207,7 +207,7 @@ function ai_usage(array $user): void
         'status' => $row['status'],
         'createdAt' => iso_date($row['created_at']),
         'restorable' => $restorableId !== null && (int) $row['id'] === $restorableId && (int) $row['has_snapshot'] === 1,
-    ], $stmt->fetchAll());
+    ]; }, $stmt->fetchAll());
     send_json(200, ['success' => true, 'usage' => $usage]);
 }
 

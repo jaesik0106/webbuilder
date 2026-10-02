@@ -58,7 +58,7 @@ function files_folder_of($value): ?string
 
 function files_extensions(): array
 {
-    return array_values(array_unique(array_map(fn ($t) => $t[0], FILES_TYPES)));
+    return array_values(array_unique(array_map(function ($t) { return $t[0]; }, FILES_TYPES)));
 }
 
 function files_valid_name(string $name): bool
@@ -142,7 +142,7 @@ function files_trash_entries(): array
         }
         $entries[] = ['id' => $id, 'folder' => $m[2], 'name' => $m[3], 'size' => filesize("$dir/$id"), 'deletedAt' => gmdate('Y-m-d\TH:i:s.000\Z', intdiv((int) $m[1], 1000))];
     }
-    usort($entries, fn ($a, $b) => strcmp($b['deletedAt'], $a['deletedAt']));
+    usort($entries, function ($a, $b) { return strcmp($b['deletedAt'], $a['deletedAt']); });
     return $entries;
 }
 
@@ -170,7 +170,7 @@ function files_route(string $method, array $parts): void
     if ($method === 'GET' && $count === 0) {
         $list = files_folder_of($_GET['folder'] ?? null) ? [$_GET['folder']] : files_folders();
         $entries = array_merge(...array_map('files_in', $list));
-        usort($entries, fn ($a, $b) => strcmp($b['createdAt'], $a['createdAt']));
+        usort($entries, function ($a, $b) { return strcmp($b['createdAt'], $a['createdAt']); });
         send_json(200, ['success' => true, 'files' => $entries]);
     }
 

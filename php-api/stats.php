@@ -54,9 +54,9 @@ function stats_dashboard(): void
             'total' => (int) db()->query('SELECT COUNT(*) FROM visits')->fetchColumn(), 'days' => $days,
         ],
         'pages' => (int) db()->query('SELECT COUNT(*) FROM pages')->fetchColumn(),
-        'recentPages' => array_map(fn ($row) => [
+        'recentPages' => array_map(function ($row) { return [
             'id' => (int) $row['id'], 'name' => $row['name'], 'slug' => $row['slug'], 'isHome' => (bool) $row['is_home'], 'updatedAt' => iso_date($row['updated_at']),
-        ], $recent),
+        ]; }, $recent),
         'storage' => ['used' => files_dir_size(files_root()), 'quota' => (int) config_value('STORAGE_QUOTA_MB', 0) * 1048576],
     ]);
 }

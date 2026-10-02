@@ -489,7 +489,6 @@ export function OnPageToolbar({
   const redo = useConfigStore((s) => s.redo)
   const canUndo = useConfigStore((s) => s.undoStack.length > 0)
   const canRedo = useConfigStore((s) => s.redoStack.length > 0)
-  const selectBlock = useEditorStore((s) => s.selectBlock)
   const dirty = useIsDirty()
   const [saving, setSaving] = useState(false)
 

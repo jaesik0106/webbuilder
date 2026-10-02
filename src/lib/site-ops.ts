@@ -49,7 +49,7 @@ function findBlock(blocks: BlockConfig[], id: string): BlockConfig | null {
   return null
 }
 
-function indexBlocks(blocks: BlockConfig[], ids: Set<string>, typeById: Map<string, string>) {
+function indexBlocks(blocks: BlockConfig[], ids: Set<string>, typeById: Map<string, BlockType>) {
   for (const block of blocks) {
     ids.add(block.id)
     typeById.set(block.id, block.type)
@@ -103,7 +103,7 @@ export function validateOperations(rawOps: unknown, page: PageState): Validation
   if (!Array.isArray(rawOps)) return { valid, rejected: [{ op: rawOps, reason: 'operations must be an array' }] }
 
   const ids = new Set<string>()
-  const typeById = new Map<string, string>()
+  const typeById = new Map<string, BlockType>()
   indexBlocks(page.blocks, ids, typeById)
   const reject = (op: unknown, reason: string) => rejected.push({ op, reason })
 

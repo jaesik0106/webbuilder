@@ -1,0 +1,43 @@
+---
+description: 닷홈 서버 배포 방법. 사용자가 "배포", "서버에 올려", "닷홈" 이라고 하면 따른다.
+alwaysApply: false
+---
+
+# 닷홈 배포
+
+배포는 터미널에서 이 한 줄이면 된다 (프로젝트 루트 `웹빌더/`에서):
+
+```bash
+npm run deploy
+```
+
+하는 일: `npm run build` → `deploy/` 폴더 준비(dist + php-api + config.php + .htaccess) → FTP 업로드.
+성공하면 마지막에 `배포를 마쳤습니다.` 가 나온다. 업로드 없이 폴더만 만들어 보려면 `npm run deploy -- --dry-run`.
+
+## 서버 정보
+
+- 사이트: https://a249080f1.10pages.co.kr/ (닷홈, 아파치 + PHP 7.x)
+- FTP 접속 정보는 `backend/.env` 에서 읽는다: `FTP_HOST`(= `a249080f1.10pages.co.kr` 도메인 전체), `FTP_USER`, `FTP_PASSWORD`, `FTP_REMOTE_DIR`(`/html`).
+- 서버용 DB·계정 값은 같은 파일의 `PROD_` 항목. `backend/.env` 는 저장소에 올라가지 않는다. 비밀번호를 출력하거나 채팅에 쓰지 않는다.
+
+## 배포 전 확인
+
+1. `npm run build` 가 오류 없이 끝나는지.
+2. 사용자에게 한 번 확인받는다 (배포는 실제 서버에 반영된다).
+3. `FTP_HOST` 가 `a249080f1` 처럼 도메인 없이 짧게만 적혀 있으면 업로드가 `Could not resolve host` 로 실패한다. 도메인 전체로 고친다.
+
+## 배포 후 확인 (로그인 없이 가능한 것)
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" https://a249080f1.10pages.co.kr/
+curl -s https://a249080f1.10pages.co.kr/api/public/home
+```
+
+화면이 200이고 공개 API가 `{"success":true,...}` 를 주면 정상.
+
+## 주의
+
+- 서버 PHP 는 7.4 미만이다. `php-api/` 에서 화살표 함수(`fn`) 등 최신 문법을 쓰지 않는다.
+- 닷홈은 `PUT`/`DELETE` 요청을 막는다. 화면은 `POST ?_method=PUT|DELETE` 로 보내고 `php-api/index.php`(서버)와 `backend/src/app.js`(로컬)가 원래 방식으로 바꿔 처리한다. 새 API 를 만들 때도 이 규칙을 따른다 (`src/lib/builderApi.ts` 의 `request()` 사용).
+- Express(`backend/`) 와 PHP(`php-api/`) API 는 항상 같은 동작으로 맞춘다.
+- 로컬 서버 DB 의 페이지를 지우는 등 되돌릴 수 없는 작업은 사용자에게 먼저 묻는다.

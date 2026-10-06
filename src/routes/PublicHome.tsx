@@ -33,8 +33,10 @@ function loadIntoEditor(page: SavedPage) {
 // 서버에 메인 페이지가 아직 없으면(처음 설치) 저장 안 된 새 메인 페이지로 편집을 시작한다.
 // 기준 스냅샷을 빈 문자열로 두어 처음부터 "저장 안 됨" 상태가 되고, [저장]하면 서버가 첫 페이지를 메인으로 만든다.
 function startNewHome() {
-  const { config } = useConfigStore.getState()
-  const id = useProjectsStore.getState().addProject(config.name || '메인 페이지')
+  // 삭제된 페이지의 섹션이 브라우저에 남아 있을 수 있으므로, 남은 내용을 버리고 빈 페이지(상단 메뉴만)로 시작한다.
+  const name = '메인 페이지'
+  useConfigStore.getState().setConfig({ name, blocks: [], pages: [{ id: 'page-home', name: 'Home', path: '/', blocks: [] }] })
+  const id = useProjectsStore.getState().addProject(name)
   useEditorStore.getState().setActiveProject(id)
   useEditorStore.getState().selectBlock(null)
   useEditorStore.getState().markSaved('')

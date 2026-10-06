@@ -108,7 +108,14 @@ function SiteView({
   }
 
   function toggleEditing() {
-    if (!page) return
+    if (!page) {
+      // 메인이 아직 없으면(삭제했거나 처음 설치) 섹션 추가·수정 버튼에서 새 메인 편집을 시작한다.
+      if (startIfEmpty && isAdmin && !editing) {
+        startNewHome()
+        setEditing(true)
+      }
+      return
+    }
     if (editing) {
       if (isDirty()) setConfirmExit(true)
       else finishEditing()
@@ -171,7 +178,7 @@ function SiteView({
       </div>
 
       {isAdmin ? (
-        <OnPageToolbar editing={editing} canEdit={!!page} onToggleEditing={toggleEditing} />
+        <OnPageToolbar editing={editing} canEdit={!!page || (!!startIfEmpty && state.status === 'ready')} onToggleEditing={toggleEditing} />
       ) : (
         <VisitorLoginButton />
       )}

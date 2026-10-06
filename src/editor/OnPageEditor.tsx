@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  ArrowUp, ArrowDown, CopyPlus, Trash2, GripHorizontal, MousePointerClick, PanelRight, Sparkles, Undo2, Redo2, Plus, Save, LayoutDashboard, LogOut, X,
+  ArrowUp, ArrowDown, CopyPlus, Trash2, GripHorizontal, Lock, MousePointerClick, PanelRight, Sparkles, Undo2, Redo2, Plus, Save, LayoutDashboard, LogOut, X,
 } from 'lucide-react'
 import { RenderBlock } from '@/blocks/registry'
 import type { BlockConfig, BlockType } from '@/blocks/types'
 import { createAddable, createBlankSection, findNode, targetContainerFor, type AddableType } from '@/lib/element-tree'
 import { ElementEditorProvider } from './ElementEditor'
 import { blockMetadata } from '@/lib/block-metadata'
+import { FIXED_BLOCK_TYPE, isFixedBlock } from '@/lib/fixed-navbar'
 import { clearToken } from '@/lib/builderApi'
 import { useConfigStore } from '@/store/configStore'
 import { EDITOR_PANEL, useEditorStore } from '@/store/editorStore'
@@ -130,7 +131,8 @@ function AddSectionPanel({ onClose }: { onClose: () => void }) {
         {selectedBlockId ? '선택한 섹션 바로 아래에 추가됩니다.' : '페이지 맨 아래(하단 정보 위)에 추가됩니다.'}
       </p>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        {blockMetadata.map((meta) => (
+        {/* 상단 메뉴는 모든 페이지에 고정으로 하나만 있으므로 추가 목록에서 뺀다. */}
+        {blockMetadata.filter((meta) => meta.type !== FIXED_BLOCK_TYPE).map((meta) => (
           <button
             key={meta.type}
             type="button"
@@ -182,6 +184,11 @@ function EditableBlock({
   const duplicateBlock = useConfigStore((s) => s.duplicateBlock)
   const moveBlock = useConfigStore((s) => s.moveBlock)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  // 상단 메뉴는 맨 위에 고정: 이동·복제·삭제 버튼을 보여 주지 않고, 바로 아래 섹션도 그 위로 못 올린다.
+  const fixed = isFixedBlock(block)
+  // 이름표와 섹션 버튼은 섹션 바깥(위쪽, 맨 위 섹션은 아래쪽)에 달아 내용을 가리지 않는다.
+  const edge = index === 0 ? 'top-full mt-1' : 'bottom-full mb-1'
+  const fixedAbove = useConfigStore((s) => isFixedBlock(s.getActivePageBlocks()[0]))
   const [imagePath, setImagePath] = useState<PropPath | null>(null)
   // 메인 페이지를 고칠 때는 메인 폴더, 서브 페이지는 서브 폴더에 올린다.
   const activeProjectId = useEditorStore((s) => s.activeProjectId)
@@ -338,18 +345,20 @@ function EditableBlock({
       }}
     >
       <span
-        className={`absolute top-1 left-1 z-10 px-2 py-0.5 rounded-md bg-[#1c54e4] text-white text-[13px] font-medium shadow-sm pointer-events-none ${
+        title={fixed ? '모든 페이지 맨 위에 고정된 메뉴입니다. 메뉴 항목은 관리자 > 메뉴에서 고칩니다.' : undefined}
+        className={`absolute ${edge} left-0 z-30 px-2 py-0.5 rounded-md bg-[#1c54e4] text-white text-[13px] font-medium shadow-sm whitespace-nowrap ${fixed ? '' : 'pointer-events-none'} ${
           selected ? 'opacity-100' : 'opacity-0 group-hover/edit:opacity-100'
         }`}
       >
         {blockLabels.get(block.type) ?? block.type}
+        {fixed && <><Lock size={11} className="inline ml-1.5 mr-0.5 -mt-0.5" />고정</>}
       </span>
-      {selected && (
+      {selected && !fixed && (
         <div
           data-section-actions
-          className="absolute top-1 right-1 z-20 flex items-center gap-0.5 p-0.5 rounded-lg bg-white border border-[#e3e6ea] shadow-[0_4px_14px_rgba(15,23,42,0.14)]"
+          className={`absolute ${edge} right-0 z-30 flex items-center gap-0.5 p-0.5 rounded-lg bg-white border border-[#e3e6ea] shadow-[0_4px_14px_rgba(15,23,42,0.14)]`}
         >
-          <SectionButton label="위로 옮기기" disabled={index === 0} onClick={() => moveBlock(index, index - 1)}>
+          <SectionButton label="위로 옮기기" disabled={index === 0 || (index === 1 && fixedAbove)} onClick={() => moveBlock(index, index - 1)}>
             <ArrowUp size={13} />
           </SectionButton>
           <SectionButton label="아래로 옮기기" disabled={index === total - 1} onClick={() => moveBlock(index, index + 1)}>

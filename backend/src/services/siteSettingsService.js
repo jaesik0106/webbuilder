@@ -46,6 +46,8 @@ function cleanMenu(items, depth = 1) {
       href: /^(\/(?!\/)|#|https?:\/\/|mailto:|tel:)/i.test(href) ? href.slice(0, 500) : "#",
       target: item.target === "_blank" ? "_blank" : "_self",
       ...(item.hidden === true ? { hidden: true } : {}),
+      ...(item.hideChildren === true ? { hideChildren: true } : {}),
+      ...(item.linkEnabled === true ? { linkEnabled: true } : {}),
       children: cleanMenu(item.children, depth + 1),
     };
   });

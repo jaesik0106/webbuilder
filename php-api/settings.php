@@ -65,6 +65,8 @@ function settings_clean_menu($items, int $depth = 1): array
             'target' => ($item['target'] ?? '') === '_blank' ? '_blank' : '_self',
         ];
         if (($item['hidden'] ?? false) === true) $entry['hidden'] = true;
+        if (($item['hideChildren'] ?? false) === true) $entry['hideChildren'] = true;
+        if (($item['linkEnabled'] ?? false) === true) $entry['linkEnabled'] = true;
         $entry['children'] = settings_clean_menu($item['children'] ?? [], $depth + 1);
         $out[] = $entry;
     }

@@ -2,7 +2,7 @@ import type { BlockConfig } from '../types'
 import { useState } from 'react'
 import { ChevronDown, Menu, X } from 'lucide-react'
 import { useSiteSettingsStore } from '@/store/siteSettingsStore'
-import { parseMenu, visibleMenu, type MenuItem } from '@/lib/site-menu'
+import { menuLinkProps, parseMenu, visibleMenu, type MenuItem } from '@/lib/site-menu'
 
 /** 관리자 > 메뉴 에서 만든 사이트 메뉴. 하나도 없으면 null (블록에 적어 둔 메뉴를 쓴다). */
 function useSiteMenu(): MenuItem[] | null {
@@ -18,9 +18,7 @@ function SubMenuList({ items, depth }: { items: MenuItem[]; depth: number }) {
       {items.map((item) => (
         <li key={item.id}>
           <a
-            href={item.children.length ? undefined : item.href}
-            target={item.target}
-            rel={item.target === '_blank' ? 'noreferrer' : undefined}
+            {...menuLinkProps(item)}
             className={`block px-3 py-1.5 rounded-md text-[13px] whitespace-nowrap ${item.children.length ? 'text-text-1 font-semibold' : 'text-text-2 hover:text-text-0 hover:bg-bg-3'}`}
           >
             {item.label}
@@ -38,9 +36,7 @@ function SiteMenuDesktop({ items }: { items: MenuItem[] }) {
       {items.map((item) => (
         <div key={item.id} className="relative group/menu">
           <a
-            href={item.children.length ? undefined : item.href}
-            target={item.target}
-            rel={item.target === '_blank' ? 'noreferrer' : undefined}
+            {...menuLinkProps(item)}
             className="flex items-center gap-0.5 text-[13px] text-text-2 hover:text-text-0 transition-colors cursor-pointer py-2"
           >
             {item.label}

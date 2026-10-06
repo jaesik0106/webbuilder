@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import { produce } from 'immer'
 import type { BlockConfig, SiteConfig, ThemeConfig, PageConfig } from '@/blocks/types'
 import { cloneWithNewIds, containsNode, createElement, findNode } from '@/lib/element-tree'
+import { isFixedBlock, pinNavbar } from '@/lib/fixed-navbar'
 
 function ensurePages(config: SiteConfig): PageConfig[] {
   if (config.pages && config.pages.length > 0) return config.pages
@@ -153,8 +154,9 @@ function mutateActivePageBlocks(
   mutator: (blocks: BlockConfig[]) => BlockConfig[],
 ): SiteConfig {
   const pages = ensurePages(config)
+  // 어떤 수정이든 끝나면 상단 메뉴를 맨 위에 다시 고정한다.
   const newPages = pages.map((p) =>
-    p.id === activePageId ? { ...p, blocks: mutator([...p.blocks]) } : p,
+    p.id === activePageId ? { ...p, blocks: pinNavbar(mutator([...p.blocks]), config.name) } : p,
   )
   // Keep top-level blocks synced with first page for backward compat
   const activeBlocks = newPages.find((p) => p.id === activePageId)?.blocks ?? []
@@ -170,8 +172,8 @@ export const useConfigStore = create<ConfigState>()(
       redoStack: [],
 
       setConfig: (config) => {
-        const pages = ensurePages(config)
-        set({ config: { ...config, pages }, activePageId: pages[0]?.id ?? 'page-home', undoStack: [], redoStack: [] })
+        const pages = ensurePages(config).map((p) => ({ ...p, blocks: pinNavbar(p.blocks, config.name) }))
+        set({ config: { ...config, pages, blocks: pages[0]?.blocks ?? [] }, activePageId: pages[0]?.id ?? 'page-home', undoStack: [], redoStack: [] })
       },
 
       setActivePage: (id) => set({ activePageId: id }),
@@ -227,7 +229,8 @@ export const useConfigStore = create<ConfigState>()(
             if (!page) return
             // 하위 children 은 노드와 함께 사라진다.
             const found = findNode(page.blocks, id)
-            if (!found) return
+            // 상단 메뉴는 지울 수 없다.
+            if (!found || (!found.parent && isFixedBlock(found.node))) return
             const list = found.parent ? found.parent.children! : page.blocks
             list.splice(found.index, 1)
             draft.blocks = page.blocks
@@ -254,6 +257,7 @@ export const useConfigStore = create<ConfigState>()(
             }
           }
           const original = blocks[idx]
+          if (isFixedBlock(original)) return state
           const clone: BlockConfig = {
             ...JSON.parse(JSON.stringify(original)),
             id: `block-${Date.now()}`,
@@ -364,7 +368,7 @@ export const useConfigStore = create<ConfigState>()(
         set((state) => ({
           ...pushUndo(state, 'Add page'),
           config: produce(withPages(state.config), (draft) => {
-            draft.pages!.push({ id, name, path, blocks: [] })
+            draft.pages!.push({ id, name, path, blocks: pinNavbar([], state.config.name) })
           }),
           activePageId: id,
         }))

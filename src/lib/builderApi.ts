@@ -49,7 +49,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (options.body) headers.set('Content-Type', 'application/json')
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
-  const response = await fetch(`${API_BASE}${path}`, { ...options, headers })
+  // 닷홈 같은 일부 호스팅은 PUT·DELETE 요청을 막고 다른 주소로 돌려보낸다. POST 로 보내고 원래 방식은 _method 로 알려 준다.
+  const method = (options.method ?? 'GET').toUpperCase()
+  const overridden = method === 'PUT' || method === 'DELETE' || method === 'PATCH'
+  const url = overridden ? `${API_BASE}${path}${path.includes('?') ? '&' : '?'}_method=${method}` : `${API_BASE}${path}`
+  const response = await fetch(url, { ...options, method: overridden ? 'POST' : options.method, headers })
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
     // 만료되거나 잘못된 토큰은 지워서 관리자 화면이 로그인으로 돌아가게 한다.

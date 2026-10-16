@@ -12,6 +12,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 $method = $_SERVER['REQUEST_METHOD'];
+// 닷홈 같은 호스팅이 PUT·DELETE 를 막으므로, 화면은 POST + ?_method=PUT|DELETE 로 보낸다.
+if ($method === 'POST' && isset($_GET['_method']) && in_array(strtoupper($_GET['_method']), ['PUT', 'DELETE', 'PATCH'], true)) {
+    $method = strtoupper($_GET['_method']);
+}
 $uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $apiPos = strpos($uri, '/api/');
 $path = '/' . trim($apiPos === false ? '' : substr($uri, $apiPos + 5), '/');

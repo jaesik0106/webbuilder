@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { RenderBlock } from '@/blocks/registry'
 import type { SiteConfig } from '@/blocks/types'
@@ -13,6 +13,7 @@ import { EditableBlocks, OnPageToolbar, UnsavedChangesDialog, VisitorLoginButton
 import { discardChanges, isDirty, markCurrentSaved, saveCurrentPage } from '@/editor/manualSave'
 import { SiteHead } from '@/lib/SiteHead'
 import { PopupLayer } from '@/lib/PopupLayer'
+import { pinNavbar } from '@/lib/fixed-navbar'
 
 type LoadState = { status: 'loading' } | { status: 'ready'; page: SavedPage | null } | { status: 'error' }
 
@@ -29,10 +30,22 @@ function loadIntoEditor(page: SavedPage) {
   markCurrentSaved()
 }
 
+// 서버에 메인 페이지가 아직 없으면(처음 설치) 저장 안 된 새 메인 페이지로 편집을 시작한다.
+// 기준 스냅샷을 빈 문자열로 두어 처음부터 "저장 안 됨" 상태가 되고, [저장]하면 서버가 첫 페이지를 메인으로 만든다.
+function startNewHome() {
+  // 삭제된 페이지의 섹션이 브라우저에 남아 있을 수 있으므로, 남은 내용을 버리고 빈 페이지(상단 메뉴만)로 시작한다.
+  const name = '메인 페이지'
+  useConfigStore.getState().setConfig({ name, blocks: [], pages: [{ id: 'page-home', name: 'Home', path: '/', blocks: [] }] })
+  const id = useProjectsStore.getState().addProject(name)
+  useEditorStore.getState().setActiveProject(id)
+  useEditorStore.getState().selectBlock(null)
+  useEditorStore.getState().markSaved('')
+}
+
 /** 페이지 하나를 실제 화면 그대로 보여 주고, 관리자에게는 바로 수정 도구를 붙인다. */
 function SiteView({
-  load, autoEdit, emptyTitle = '아직 공개된 페이지가 없습니다', emptyText = '관리자가 페이지를 저장하면 이곳에 표시됩니다.',
-}: { load: () => Promise<SavedPage | null>; autoEdit?: boolean; emptyTitle?: string; emptyText?: string }) {
+  load, autoEdit, startIfEmpty, emptyTitle = '아직 공개된 페이지가 없습니다', emptyText = '관리자가 페이지를 저장하면 이곳에 표시됩니다.',
+}: { load: () => Promise<SavedPage | null>; autoEdit?: boolean; startIfEmpty?: boolean; emptyTitle?: string; emptyText?: string }) {
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [editing, setEditing] = useState(!!autoEdit)
   const isAdmin = !!getToken()
@@ -48,6 +61,8 @@ function SiteView({
         if (autoEdit && page) {
           loadIntoEditor(page)
           setEditing(true)
+        } else if (autoEdit && startIfEmpty && !page) {
+          startNewHome()
         }
       })
       .catch(() => {
@@ -61,7 +76,9 @@ function SiteView({
   const page = state.status === 'ready' ? state.page : null
   const config: SiteConfig | undefined = editing ? editingConfig : page?.config
   // 에디터의 setConfig 와 같은 기준으로 첫 페이지를 홈으로 렌더한다.
-  const blocks = config?.pages?.length ? config.pages[0].blocks : config?.blocks ?? []
+  // 상단 메뉴는 저장된 페이지에 없더라도 항상 맨 위에 보여 준다.
+  const pageBlocks = config?.pages?.length ? config.pages[0].blocks : config?.blocks
+  const blocks = useMemo(() => (pageBlocks ? pinNavbar(pageBlocks, config?.name) : []), [pageBlocks, config?.name])
 
   const resolved = useMemo(() => resolveTheme(config?.theme), [config?.theme])
   const cssVars = useMemo(() => themeToCSS(resolved), [resolved])
@@ -81,21 +98,6 @@ function SiteView({
 
   const inset = canvasLeft + canvasRight
   const available = Math.max(viewportWidth - inset, 1)
-  // 편집 중에는 실제 창 너비로 배치한 뒤, 패널 사이 공간에 맞게 축소한다.
-  const scale = inset > 0 ? available / viewportWidth : 1
-  const frameRef = useRef<HTMLDivElement>(null)
-  const [frameHeight, setFrameHeight] = useState(0)
-
-  useEffect(() => {
-    const el = frameRef.current
-    if (!el || scale === 1) return
-    const update = () => setFrameHeight(el.offsetHeight)
-    update()
-    const observer = new ResizeObserver(update)
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [scale, editing, state.status])
-
   // 편집을 끝내면 저장된 내용(또는 방금 저장한 내용)을 보여 준다.
   function finishEditing() {
     if (!page) return
@@ -106,7 +108,14 @@ function SiteView({
   }
 
   function toggleEditing() {
-    if (!page) return
+    if (!page) {
+      // 메인이 아직 없으면(삭제했거나 처음 설치) 섹션 추가·수정 버튼에서 새 메인 편집을 시작한다.
+      if (startIfEmpty && isAdmin && !editing) {
+        startNewHome()
+        setEditing(true)
+      }
+      return
+    }
     if (editing) {
       if (isDirty()) setConfirmExit(true)
       else finishEditing()
@@ -135,12 +144,9 @@ function SiteView({
           boxShadow: editing ? 'inset 0 0 0 3px #1c54e4' : undefined,
         } as React.CSSProperties}
       >
-        <div style={scale === 1 ? undefined : { height: frameHeight * scale }}>
-        <div
-          ref={frameRef}
-          className="@container"
-          style={scale === 1 ? undefined : { width: viewportWidth, transform: `scale(${scale})`, transformOrigin: 'top left' }}
-        >
+        {/* 편집 중에도 축소하지 않는다: 패널 사이 너비 그대로 배치해 글자가 실제 크기로 보인다 (좁으면 블록이 반응형으로 바뀜). */}
+        <div>
+        <div className="@container">
         {state.status === 'loading' && <div className="min-h-screen" />}
 
         {state.status === 'error' && (
@@ -172,7 +178,7 @@ function SiteView({
       </div>
 
       {isAdmin ? (
-        <OnPageToolbar editing={editing} canEdit={!!page} onToggleEditing={toggleEditing} />
+        <OnPageToolbar editing={editing} canEdit={!!page || (!!startIfEmpty && state.status === 'ready')} onToggleEditing={toggleEditing} />
       ) : (
         <VisitorLoginButton />
       )}
@@ -207,15 +213,23 @@ function SiteView({
   )
 }
 
+/** 기본은 홈페이지 그대로 보여 준다. 관리자 화면의 [수정]으로 들어온 경우(?edit=1)에만 바로 편집 모드로 연다. */
+function useEditRequested() {
+  const [params] = useSearchParams()
+  return !!getToken() && params.get('edit') === '1'
+}
+
 const loadHome = () => fetchPublicHome().then((data) => data.page)
 
 export function PublicHome() {
-  return <SiteView load={loadHome} autoEdit={!!getToken()} />
+  const editRequested = useEditRequested()
+  return <SiteView load={loadHome} autoEdit={editRequested} startIfEmpty />
 }
 
 /** /page/:id 는 페이지 ID(주소)로 연다. 숫자만 있는 예전 주소는 로그인한 관리자가 번호로도 연다. */
 export function PageView() {
   const { id = '' } = useParams()
+  const editRequested = useEditRequested()
   const load = useMemo(() => async () => {
     try {
       return (await fetchPublicPage(id)).page
@@ -228,7 +242,7 @@ export function PageView() {
     <SiteView
       key={id}
       load={load}
-      autoEdit={!!getToken()}
+      autoEdit={editRequested}
       emptyTitle="페이지를 찾을 수 없습니다"
       emptyText="주소가 바뀌었거나 삭제된 페이지입니다."
     />
@@ -238,6 +252,7 @@ export function PageView() {
 /** /about 처럼 서브 페이지 주소로 들어온 방문자에게 그 페이지를 보여 준다. */
 export function PublicSubPage() {
   const { slug = '' } = useParams()
+  const editRequested = useEditRequested()
   const load = useMemo(
     () => () => fetchPublicPage(slug).then((data) => data.page).catch(() => null),
     [slug],
@@ -246,7 +261,7 @@ export function PublicSubPage() {
     <SiteView
       key={slug}
       load={load}
-      autoEdit={!!getToken()}
+      autoEdit={editRequested}
       emptyTitle="페이지를 찾을 수 없습니다"
       emptyText="주소가 바뀌었거나 삭제된 페이지입니다."
     />

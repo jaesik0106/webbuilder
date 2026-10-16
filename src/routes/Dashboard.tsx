@@ -292,7 +292,7 @@ function NewPagePanel({ onClose }: { onClose: () => void }) {
     try {
       await ensureServerPage(id, name, config, slug)
       useProjectsStore.getState().updateProjectConfig(id, config)
-      navigate(`/page/${slug}`)
+      navigate(`/page/${slug}?edit=1`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '페이지를 만들지 못했습니다.')
     }
@@ -595,7 +595,7 @@ export function Dashboard() {
 
   function openPage(project: Project) {
     const address = project.slug || project.serverId
-    if (address) navigate(`/page/${address}`)
+    if (address) navigate(`/page/${address}?edit=1`)
   }
 
   return (
@@ -648,7 +648,7 @@ export function MainScreen() {
 
   function openPage(project: Project) {
     const address = project.slug || project.serverId
-    if (address) navigate(`/page/${address}`)
+    if (address) navigate(`/page/${address}?edit=1`)
   }
 
   return (
@@ -669,7 +669,7 @@ export function PagesScreen() {
 
   function openPage(project: Project) {
     const address = project.slug || project.serverId
-    if (address) navigate(`/page/${address}`)
+    if (address) navigate(`/page/${address}?edit=1`)
   }
 
   return (

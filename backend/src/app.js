@@ -20,6 +20,12 @@ const app = express();
 const port = Number(process.env.PORT) || 3001;
 
 app.use(cors());
+// 닷홈 같은 호스팅이 PUT·DELETE 를 막으므로 화면은 POST + ?_method=PUT|DELETE 로 보낸다 (PHP API 와 같은 규칙).
+app.use((req, _res, next) => {
+  const override = String(req.query._method || "").toUpperCase();
+  if (req.method === "POST" && ["PUT", "DELETE", "PATCH"].includes(override)) req.method = override;
+  next();
+});
 app.use(express.json({ limit: "2mb" }));
 app.use("/api/auth", authRoutes);
 app.use("/api/pages", pageRoutes);
